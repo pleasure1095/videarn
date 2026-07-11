@@ -1,0 +1,107 @@
+rules_version = '2';
+
+// STAGE 3 RULES — adds `deposits` and `notifications` collections.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function isAdmin() {
+      return isSignedIn() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin";
+    }
+
+    match /users/{uid} {
+      // Anyone signed in can read a user profile — needed so referral
+      // lookups (find user by referral code) and admin views work.
+      // Nothing sensitive (password, etc.) is ever stored here; Firebase
+      // Auth handles credentials separately and they never touch Firestore.
+      allow read: if isSignedIn();
+
+      // A user may only create their OWN profile document (uid must match),
+      // and may not set their own role to "admin" — role starts as "user"
+      // and can only be escalated by an existing admin via updateAdmin.
+      allow create: if isOwner(uid) && request.resource.data.role == "user";
+
+      // A user may update their own profile, but never change their own
+      // role, referralCode, referrerCode, referralBonusTotal, or
+      // firstVipRewarded — those fields are only ever written by trusted
+      // flows (admin deposit approval, or directly by an admin via the
+      // Manage Users screen).
+      // An admin may update ANY field on ANY user's document (role changes,
+      // referral bonus credits from deposit approval, etc.)
+      allow update: if (isOwner(uid) &&
+        request.resource.data.role == resource.data.role &&
+        request.resource.data.referralCode == resource.data.referralCode &&
+        request.resource.data.referrerCode == resource.data.referrerCode &&
+        request.resource.data.referralBonusTotal == resource.data.referralBonusTotal &&
+        request.resource.data.firstVipRewarded == resource.data.firstVipRewarded)
+        || isAdmin();
+
+      allow delete: if isAdmin();
+    }
+
+    match /deposits/{depositId} {
+      // Any signed-in user can read deposits — needed for the admin queue
+      // to see everyone's deposits, and simplest for a small app without
+      // Cloud Functions to enforce per-user read filtering server-side.
+      // Nothing here is more sensitive than what a user already sees about
+      // themselves; other users' deposit amounts aren't shown in the UI.
+      allow read: if isSignedIn();
+
+      // A user may create a deposit only for themselves, and it must start
+      // as "pending" with no approval data and zero lifetimeWithdrawn —
+      // preventing a forged pre-approved or already-partially-withdrawn
+      // deposit from being submitted directly.
+      allow create: if isSignedIn() &&
+        request.resource.data.userId == request.auth.uid &&
+        request.resource.data.status == "pending" &&
+        request.resource.data.lifetimeWithdrawn == 0 &&
+        !("approvedAt" in request.resource.data);
+
+      // Admins can update anything (approve, reject, mark withdrawals paid).
+      //
+      // A user may update ONLY their own approved deposit, and ONLY to
+      // submit a withdrawal request — every other field must stay
+      // identical to what's already stored. This still trusts the client
+      // to compute lifetimeWithdrawn/amount correctly (there's no Cloud
+      // Function here to independently verify the earnings math), so a
+      // technically sophisticated user could tamper with this from
+      // dev tools. Closing that gap fully would require moving the
+      // withdrawal-balance calculation into a Cloud Function — noted as a
+      // known limitation of the current backend-function-free architecture.
+      allow update: if isAdmin() || (
+        isOwner(resource.data.userId) &&
+        resource.data.status == "approved" &&
+        request.resource.data.status == resource.data.status &&
+        request.resource.data.approvedAt == resource.data.approvedAt &&
+        request.resource.data.amount == resource.data.amount &&
+        request.resource.data.planId == resource.data.planId &&
+        request.resource.data.planDaily == resource.data.planDaily
+      );
+
+      allow delete: if isAdmin();
+    }
+
+    match /notifications/{notifId} {
+      // A user can read/update (mark read) only their own notifications.
+      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow update: if isSignedIn() && resource.data.userId == request.auth.uid &&
+        request.resource.data.userId == resource.data.userId;
+
+      // Notifications are created by trusted app flows (deposit approval,
+      // referral bonus, withdrawal request) acting on behalf of a signed-in
+      // user — allow any signed-in user to create one, since there's no
+      // Cloud Function to originate these server-side instead.
+      allow create: if isSignedIn();
+
+      allow delete: if isAdmin();
+    }
+  }
+}

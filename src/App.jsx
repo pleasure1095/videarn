@@ -12,6 +12,7 @@ import ReferralsPage from "./pages/ReferralsPage";
 import NotificationsPage from "./pages/NotificationsPage";
 import SettingsPage from "./pages/SettingsPage";
 import AdminDepositsPage from "./pages/AdminDepositsPage";
+import AdminEarningsPage from "./pages/AdminEarningsPage";
 import ManageUsersPage from "./pages/ManageUsersPage";
 
 export default function App() {
@@ -69,6 +70,7 @@ export default function App() {
   function renderTab() {
     if (isAdmin) {
       if (activeTab === "users") return <ManageUsersPage />;
+      if (activeTab === "earnings") return <AdminEarningsPage />;
       return <AdminDepositsPage />;
     }
     if (activeTab === "plans") return <VipPlansPage onJoined={() => setTab("dashboard")} />;
@@ -87,7 +89,7 @@ export default function App() {
       {/* Primary navigation — always visible, matching the reference
           app's bottom bar design. */}
       <BottomTabBar tab={activeTab} setTab={setTab} isAdmin={isAdmin} unreadCount={unreadCount} />
-      <WelcomeModal userName={user.name} />
+      <WelcomeModal userId={user.uid} userName={user.name} />
     </div>
   );
 }

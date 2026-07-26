@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "./context/AuthContext";
 import { C } from "./styles/theme";
+import { getUserNotifications } from "./services/notifications";
 import AuthPage from "./pages/AuthPage";
 import Nav from "./components/Nav";
 import BottomTabBar from "./components/BottomTabBar";
@@ -16,6 +17,31 @@ import ManageUsersPage from "./pages/ManageUsersPage";
 export default function App() {
   const { user, booting, isAdmin, logout } = useAuth();
   const [tab, setTab] = useState(null);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  // Poll for unread notifications so the bottom nav badge stays current
+  // even while the user is sitting on a different tab. Lightweight (a
+  // single Firestore query) and only runs for signed-in non-admin users.
+  useEffect(() => {
+    if (!user || isAdmin) return;
+    let cancelled = false;
+
+    async function checkUnread() {
+      try {
+        const all = await getUserNotifications(user.uid);
+        if (!cancelled) setUnreadCount(all.filter((n) => !n.read).length);
+      } catch (e) {
+        console.error("Failed to check notifications:", e);
+      }
+    }
+
+    checkUnread();
+    const t = setInterval(checkUnread, 30000);
+    return () => {
+      cancelled = true;
+      clearInterval(t);
+    };
+  }, [user, isAdmin, tab]);
 
   if (booting) {
     return (
@@ -53,17 +79,15 @@ export default function App() {
   }
 
   return (
-    <div style={{ minHeight: "100vh", background: C.bg, color: "#E4F0E7" }}>
-      <Nav user={user} onLogout={logout} tab={activeTab} setTab={setTab} isAdmin={isAdmin} />
-      <div style={{ maxWidth: 1100, margin: "0 auto", padding: "28px 20px", paddingBottom: 90 }}>
+    <div style={{ minHeight: "100vh", background: C.bg, color: "#F3E9DD" }}>
+      <Nav user={user} onLogout={logout} />
+      <div style={{ maxWidth: 1100, margin: "0 auto", padding: "24px 16px", paddingBottom: 100 }}>
         {renderTab()}
       </div>
-      {/* Mobile-only bottom nav — hidden on wider screens where the top Nav
-          tabs are already comfortably reachable. */}
-      <BottomTabBar tab={activeTab} setTab={setTab} isAdmin={isAdmin} />
+      {/* Primary navigation — always visible, matching the reference
+          app's bottom bar design. */}
+      <BottomTabBar tab={activeTab} setTab={setTab} isAdmin={isAdmin} unreadCount={unreadCount} />
       <WelcomeModal userName={user.name} />
     </div>
   );
 }
-
-

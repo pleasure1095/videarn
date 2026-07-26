@@ -1,4 +1,4 @@
-# Deploying VIDEARN on Netlify
+# Deploying GADJIZ on Netlify
 
 The app itself needs no code changes to run on Netlify — Firebase Auth,
 Firestore, and Storage all work identically regardless of where the

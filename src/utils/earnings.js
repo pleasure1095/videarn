@@ -8,15 +8,19 @@
 //    24h window, earnings accrue daily as before (flat daily rate, no
 //    compounding).
 // 2. Capital (the original investment amount) is NEVER withdrawable — it
-//    stays invested permanently and only generates daily profit. This is a
-//    deliberate reversal of the original "Withdrawable = Capital + Earnings"
-//    rule.
+//    stays invested permanently and only generates daily profit.
 // 3. Only profit/earnings can be withdrawn, and withdrawals are tracked as
 //    a running lifetime total per investment (not reset to zero on each
 //    withdrawal) — so withdrawable balance = lifetime earnings minus
 //    lifetime withdrawn.
 // 4. Minimum withdrawal is ₦1,200, checked against the withdrawable
 //    profit balance (not the locked capital).
+// 5. DAILY REVIEWS GATE: a day's earning is fully conditional on the user
+//    having rated ALL of that day's featured products (see
+//    services/reviews.js). No rating that day = ₦0 earned for that day —
+//    this is an intentional, confirmed design choice (not a bonus-on-top
+//    model). Missed days are gone permanently; there is no catch-up
+//    mechanism, unlike the earlier Read to Earn design this replaced.
 
 export const EARNINGS_START_DELAY_MS = 24 * 60 * 60 * 1000; // 24 hours
 export const MIN_WITHDRAWAL = 1200;
@@ -45,20 +49,33 @@ export function getDaysEarning(approvedAt, now = Date.now()) {
  * @param {number} dailyRate - the VIP plan's daily earning amount
  * @param {number} approvedAt - timestamp the deposit was approved
  * @param {number} lifetimeWithdrawn - total profit already withdrawn from
- *   this specific investment (new field — defaults to 0 for investments
- *   that predate this rule)
+ *   this specific investment
+ * @param {number} reviewedDayCount - count of distinct earning-days for
+ *   which the user completed that day's full product review set. Callers
+ *   get this from services/reviews.js by comparing the investment's
+ *   earning-day range against the user's completed-review-day records.
+ *   Capped by the caller at daysEarning (can't exceed total days elapsed).
+ *   Unreviewed days earn nothing — there is no partial credit and no
+ *   catch-up, unlike the guaranteed/pending split this replaced.
  * @param {number} now - defaults to current time; parameterized for testing
  */
-export function calculateInvestmentEarnings(dailyRate, approvedAt, lifetimeWithdrawn = 0, now = Date.now()) {
+export function calculateInvestmentEarnings(dailyRate, approvedAt, lifetimeWithdrawn = 0, reviewedDayCount = 0, now = Date.now()) {
   const daysEarning = getDaysEarning(approvedAt, now);
-  const totalEarnings = dailyRate * daysEarning;
-  const withdrawableBalance = Math.max(0, totalEarnings - lifetimeWithdrawn);
+  const totalEarnings = dailyRate * daysEarning; // theoretical max if every day were reviewed
+
+  const cappedReviewedDays = Math.min(reviewedDayCount, daysEarning);
+  const availableEarnings = dailyRate * cappedReviewedDays;
+  const missedEarnings = dailyRate * (daysEarning - cappedReviewedDays); // forfeited permanently, shown for transparency only
+
+  const withdrawableBalance = Math.max(0, availableEarnings - lifetimeWithdrawn);
   const earningsStartTime = getEarningsStartTime(approvedAt);
   const stillInGracePeriod = now < earningsStartTime;
 
   return {
     daysEarning,
     totalEarnings,
+    availableEarnings,
+    missedEarnings,
     withdrawableBalance,
     earningsStartTime,
     stillInGracePeriod,

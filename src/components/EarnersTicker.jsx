@@ -27,10 +27,21 @@ export default function EarnersTicker() {
   const [visibleIndex, setVisibleIndex] = useState(0);
 
   useEffect(() => {
-    const t = setInterval(() => {
-      setVisibleIndex((i) => (i + 1) % PLACEHOLDER_FEED.length);
-    }, 2800);
-    return () => clearInterval(t);
+    // Randomized 30-60s between rotations (was a constant 2.8s) — this is
+    // ambient social-proof, not something that should compete for
+    // attention every few seconds. A fresh random delay is scheduled
+    // after each rotation rather than a single setInterval, so the gap
+    // varies each time instead of settling into a fixed rhythm.
+    let timeoutId;
+    function scheduleNext() {
+      const delay = 30000 + Math.random() * 30000; // 30s–60s
+      timeoutId = setTimeout(() => {
+        setVisibleIndex((i) => (i + 1) % PLACEHOLDER_FEED.length);
+        scheduleNext();
+      }, delay);
+    }
+    scheduleNext();
+    return () => clearTimeout(timeoutId);
   }, []);
 
   const entry = PLACEHOLDER_FEED[visibleIndex];

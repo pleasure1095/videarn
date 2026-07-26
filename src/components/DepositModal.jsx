@@ -25,6 +25,7 @@ export default function DepositModal({ user, onClose, onDone, initialPlanId }) {
   const [step, setStep] = useState(1);
   const [planId, setPlanId] = useState(initialPlanId || "vip1");
   const [senderName, setSenderName] = useState("");
+  const [amountPaid, setAmountPaid] = useState("");
   const [proof, setProof] = useState("");
   const [txRef, setTxRef] = useState("");
   const [screenshotFile, setScreenshotFile] = useState(null);
@@ -49,12 +50,9 @@ export default function DepositModal({ user, onClose, onDone, initialPlanId }) {
       setErr("Enter the name used for the transfer.");
       return;
     }
-    if (!proof.trim()) {
-      setErr("Describe your payment.");
-      return;
-    }
-    if (!txRef.trim() && !screenshotFile) {
-      setErr("Provide a transaction reference/ID or upload a payment screenshot.");
+    const numAmountPaid = Number(amountPaid);
+    if (!numAmountPaid || numAmountPaid <= 0) {
+      setErr("Enter the amount you paid.");
       return;
     }
 
@@ -66,6 +64,7 @@ export default function DepositModal({ user, onClose, onDone, initialPlanId }) {
         userEmail: user.email,
         planId,
         senderName,
+        amountPaid: numAmountPaid,
         proof,
         txRef,
         screenshotFile,
@@ -86,7 +85,7 @@ export default function DepositModal({ user, onClose, onDone, initialPlanId }) {
       <Overlay onClose={onClose}>
         <div style={{ textAlign: "center" }}>
           <div style={{ fontSize: 52, marginBottom: 16 }}>✅</div>
-          <h2 style={{ fontSize: 22, color: C.green, fontFamily: "Georgia,serif", marginBottom: 10 }}>
+          <h2 style={{ fontSize: 22, fontWeight: 800, color: C.green, marginBottom: 10 }}>
             Proof Submitted!
           </h2>
           <p style={{ fontSize: 13, color: C.muted, marginBottom: 12 }}>
@@ -143,7 +142,7 @@ export default function DepositModal({ user, onClose, onDone, initialPlanId }) {
 
       {step === 1 && (
         <>
-          <h2 style={{ fontSize: 18, color: C.emerald, fontFamily: "Georgia,serif", marginBottom: 16 }}>
+          <h2 style={{ fontSize: 18, fontWeight: 800, color: C.emerald, marginBottom: 16 }}>
             Choose a VIP Plan
           </h2>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 18 }}>
@@ -182,7 +181,7 @@ export default function DepositModal({ user, onClose, onDone, initialPlanId }) {
 
       {step === 2 && (
         <>
-          <h2 style={{ fontSize: 18, color: C.emerald, fontFamily: "Georgia,serif", marginBottom: 4 }}>
+          <h2 style={{ fontSize: 18, fontWeight: 800, color: C.emerald, marginBottom: 4 }}>
             Make Your Transfer
           </h2>
           <p style={{ fontSize: 13, color: C.muted, marginBottom: 16 }}>
@@ -218,11 +217,11 @@ export default function DepositModal({ user, onClose, onDone, initialPlanId }) {
 
       {step === 3 && (
         <>
-          <h2 style={{ fontSize: 18, color: C.emerald, fontFamily: "Georgia,serif", marginBottom: 4 }}>
+          <h2 style={{ fontSize: 18, fontWeight: 800, color: C.emerald, marginBottom: 4 }}>
             Submit Proof
           </h2>
           <p style={{ fontSize: 13, color: C.muted, marginBottom: 16 }}>
-            Confirm your transfer details below.
+            Confirm your name and the amount you paid below.
           </p>
           <div
             style={{
@@ -238,7 +237,7 @@ export default function DepositModal({ user, onClose, onDone, initialPlanId }) {
               Plan: <span style={{ color: plan.color }}>{plan.label} — ₦{plan.daily.toLocaleString()}/day</span>
             </div>
             <div style={{ marginTop: 4 }}>
-              Amount: <span style={{ color: C.green }}>₦{plan.amount.toLocaleString()}</span>
+              Expected Amount: <span style={{ color: C.green }}>₦{plan.amount.toLocaleString()}</span>
             </div>
           </div>
           <ErrorBox msg={err} />
@@ -246,17 +245,44 @@ export default function DepositModal({ user, onClose, onDone, initialPlanId }) {
             <label style={labelStyle}>Your Sender Name (as on OPay)</label>
             <FormInput placeholder="e.g. Chioma Adebayo" value={senderName} maxLength={60} onChange={(e) => setSenderName(e.target.value)} />
           </div>
+          <div style={{ marginBottom: 18 }}>
+            <label style={labelStyle}>Amount You Paid (₦)</label>
+            <FormInput
+              type="number"
+              placeholder={`e.g. ${plan.amount}`}
+              value={amountPaid}
+              onChange={(e) => setAmountPaid(e.target.value)}
+            />
+            {Number(amountPaid) > 0 && Number(amountPaid) !== plan.amount && (
+              <p style={{ fontSize: 11, color: C.dim, marginTop: 6 }}>
+                This differs from the expected ₦{plan.amount.toLocaleString()} — the admin will review this before
+                approving.
+              </p>
+            )}
+          </div>
+
+          <div
+            style={{
+              borderTop: `1px solid ${C.border}`,
+              paddingTop: 16,
+              marginBottom: 4,
+            }}
+          >
+            <p style={{ fontSize: 11, color: C.dim, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 12 }}>
+              Optional — speeds up approval
+            </p>
+          </div>
           <div style={{ marginBottom: 14 }}>
-            <label style={labelStyle}>Payment Description</label>
+            <label style={labelStyle}>Payment Description (optional)</label>
             <textarea
               value={proof}
               onChange={(e) => setProof(e.target.value)}
-              placeholder="Time sent, amount, your OPay name, any other details…"
-              style={{ ...inputStyle, minHeight: 80, resize: "vertical" }}
+              placeholder="Time sent, any other details…"
+              style={{ ...inputStyle, minHeight: 70, resize: "vertical" }}
             />
           </div>
           <div style={{ marginBottom: 14 }}>
-            <label style={labelStyle}>Transaction Reference / ID (optional if uploading screenshot)</label>
+            <label style={labelStyle}>Transaction Reference / ID (optional)</label>
             <FormInput placeholder="e.g. OPay TXN12345678" value={txRef} maxLength={60} onChange={(e) => setTxRef(e.target.value)} />
           </div>
           <div style={{ marginBottom: 18 }}>

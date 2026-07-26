@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
-import { C } from "../styles/theme";
+import { C, GRADIENTS } from "../styles/theme";
 import { VIP_LIST } from "../utils/vipPlans";
+
+const CARD_GRADIENTS = [GRADIENTS.green, GRADIENTS.gold, GRADIENTS.blue, GRADIENTS.purple, GRADIENTS.green, GRADIENTS.gold];
 
 /**
  * Auto-rotating banner showcasing each VIP plan in turn. Purely
@@ -23,6 +25,7 @@ export default function PlanCarousel() {
   }, [paused]);
 
   const plan = VIP_LIST[index];
+  const gradient = CARD_GRADIENTS[index % CARD_GRADIENTS.length];
 
   return (
     <div
@@ -32,13 +35,13 @@ export default function PlanCarousel() {
       onTouchEnd={() => setPaused(false)}
       style={{
         position: "relative",
-        borderRadius: 16,
+        borderRadius: 18,
         padding: "20px 22px",
         marginBottom: 20,
         overflow: "hidden",
-        border: `1px solid ${plan.color}35`,
-        background: `linear-gradient(135deg, ${plan.color}14, rgba(255,255,255,0.02))`,
-        transition: "border-color 0.5s ease, background 0.5s ease",
+        background: gradient,
+        boxShadow: "0 8px 24px rgba(0,0,0,0.35)",
+        transition: "background 0.5s ease",
       }}
     >
       <div
@@ -56,26 +59,26 @@ export default function PlanCarousel() {
           <div
             style={{
               display: "inline-block",
-              padding: "3px 12px",
+              padding: "4px 12px",
               borderRadius: 20,
-              background: `${plan.color}22`,
-              color: plan.color,
-              fontSize: 11,
-              fontWeight: 700,
-              letterSpacing: "0.06em",
+              background: "rgba(255,255,255,0.22)",
+              color: "#fff",
+              fontSize: 12,
+              fontWeight: 800,
+              letterSpacing: "0.04em",
               marginBottom: 8,
             }}
           >
             {plan.label}
           </div>
-          <div style={{ fontSize: 13, color: C.muted }}>
-            Invest <strong style={{ color: "#E4F0E7" }}>₦{plan.amount.toLocaleString()}</strong> · Earn{" "}
-            <strong style={{ color: plan.color }}>₦{plan.daily.toLocaleString()}/day</strong>
+          <div style={{ fontSize: 13, color: "rgba(255,255,255,0.85)", fontWeight: 600 }}>
+            Invest <strong style={{ color: "#fff" }}>₦{plan.amount.toLocaleString()}</strong> · Earn{" "}
+            <strong style={{ color: "#fff" }}>₦{plan.daily.toLocaleString()}/day</strong>
           </div>
         </div>
-        <div style={{ fontSize: 24, fontWeight: 300, color: plan.color, whiteSpace: "nowrap" }}>
+        <div style={{ fontSize: 26, fontWeight: 800, color: "#fff", whiteSpace: "nowrap" }}>
           ₦{plan.daily.toLocaleString()}
-          <span style={{ fontSize: 11, color: C.dim, fontWeight: 400 }}> /day</span>
+          <span style={{ fontSize: 11, color: "rgba(255,255,255,0.75)", fontWeight: 600 }}> /day</span>
         </div>
       </div>
 
@@ -88,7 +91,7 @@ export default function PlanCarousel() {
               height: 3,
               flex: 1,
               borderRadius: 2,
-              background: i === index ? plan.color : "rgba(255,255,255,0.1)",
+              background: i === index ? "#fff" : "rgba(255,255,255,0.25)",
               transition: "background 0.3s ease",
             }}
           />

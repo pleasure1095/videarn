@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { C, buttonStyle } from "../styles/theme";
+import { WHATSAPP_GROUP_LINK } from "../utils/paymentInfo";
 import Logo from "./Logo";
 
-const SEEN_KEY = "videarn_welcome_seen";
+const SEEN_KEY = "gadjiz_welcome_seen";
 
 /**
  * One-time welcome modal shown after a user's first successful login in
@@ -54,8 +55,8 @@ export default function WelcomeModal({ userName }) {
       <div
         className="fade"
         style={{
-          background: "#0F1611",
-          border: `1px solid ${C.emerald}30`,
+          background: "#100C0D",
+          border: `1px solid ${C.crimson}30`,
           borderRadius: 20,
           padding: 32,
           width: "100%",
@@ -67,13 +68,31 @@ export default function WelcomeModal({ userName }) {
         <div style={{ display: "flex", justifyContent: "center", marginBottom: 18 }}>
           <Logo size={30} />
         </div>
-        <h2 style={{ fontSize: 20, color: C.emerald, fontFamily: "Georgia,serif", marginBottom: 8 }}>
+        <h2 style={{ fontSize: 20, color: C.crimson, marginBottom: 8, fontWeight: 800 }}>
           Welcome, {userName?.split(" ")[0] || "there"}
         </h2>
-        <p style={{ fontSize: 13, color: C.muted, marginBottom: 24, lineHeight: 1.6 }}>
+        <p style={{ fontSize: 13, color: C.muted, marginBottom: 20, lineHeight: 1.6 }}>
           Your account is ready. Explore VIP plans, track your earnings, and
           grow your portfolio — all in one place.
         </p>
+        <a
+          href={WHATSAPP_GROUP_LINK}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            display: "block",
+            fontSize: 13,
+            fontWeight: 700,
+            color: C.crimson,
+            textDecoration: "none",
+            marginBottom: 20,
+            padding: "10px",
+            border: `1px solid ${C.crimson}30`,
+            borderRadius: 10,
+          }}
+        >
+          💬 Join our WhatsApp community
+        </a>
         <button style={{ ...buttonStyle("gold"), width: "100%" }} onClick={dismiss}>
           Get Started
         </button>

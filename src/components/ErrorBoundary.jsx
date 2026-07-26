@@ -24,7 +24,7 @@ export default class ErrorBoundary extends Component {
   componentDidCatch(error, info) {
     // Logged for anyone who does have console access; the on-screen
     // message below is what covers everyone else.
-    console.error("VIDEARN crashed:", error, info);
+    console.error("GADJIZ crashed:", error, info);
   }
 
   render() {
@@ -42,11 +42,11 @@ export default class ErrorBoundary extends Component {
           }}
         >
           <div style={{ maxWidth: 460, textAlign: "center" }}>
-            <h1 style={{ fontSize: 20, color: C.red, marginBottom: 12, fontFamily: "Georgia,serif" }}>
+            <h1 style={{ fontSize: 20, color: C.red, marginBottom: 12 }}>
               Something went wrong
             </h1>
             <p style={{ fontSize: 13, color: C.muted, marginBottom: 8, lineHeight: 1.6 }}>
-              VIDEARN hit an unexpected error and couldn't continue.
+              GADJIZ hit an unexpected error and couldn't continue.
             </p>
             <p
               style={{

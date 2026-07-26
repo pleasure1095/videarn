@@ -2,13 +2,20 @@ import { useState } from "react";
 import { C, buttonStyle, labelStyle } from "../styles/theme";
 import { BANKS, isWithinWithdrawalHours } from "../utils/paymentInfo";
 import { validateWithdrawalAmount, MIN_WITHDRAWAL } from "../utils/earnings";
-import { requestWithdrawal } from "../services/deposits";
+import { withdrawBonusBalance } from "../services/adminUsers";
+import { createNotification } from "../services/notifications";
 import FormInput from "./FormInput";
 import { ErrorBox, SuccessBox } from "./MessageBox";
 import Overlay from "./Overlay";
 
-export default function WithdrawModal({ investment, userId, onClose, onDone }) {
-  const [amount, setAmount] = useState(String(investment.withdrawableBalance));
+/**
+ * Withdrawal flow for the combined referral bonus + welcome bonus
+ * balance — separate from WithdrawModal (which is tied to a specific VIP
+ * investment's own withdrawableBalance) since bonus money lives on the
+ * user profile, not on any single deposit.
+ */
+export default function BonusWithdrawModal({ userId, availableBalance, onClose, onDone }) {
+  const [amount, setAmount] = useState(String(availableBalance));
   const [bank, setBank] = useState("");
   const [accNo, setAccNo] = useState("");
   const [accName, setAccName] = useState("");
@@ -28,7 +35,7 @@ export default function WithdrawModal({ investment, userId, onClose, onDone }) {
       setErr("Enter a valid whole-number withdrawal amount.");
       return;
     }
-    const validation = validateWithdrawalAmount(numAmount, investment.withdrawableBalance);
+    const validation = validateWithdrawalAmount(numAmount, availableBalance);
     if (!validation.valid) {
       setErr(validation.reason);
       return;
@@ -48,13 +55,8 @@ export default function WithdrawModal({ investment, userId, onClose, onDone }) {
 
     setBusy(true);
     try {
-      await requestWithdrawal(
-        investment.id,
-        investment.lifetimeWithdrawn,
-        numAmount,
-        { bank, accNo, accName },
-        userId
-      );
+      await withdrawBonusBalance(userId, numAmount);
+      await createNotification(userId, "withdrawal", `Bonus withdrawal of ₦${numAmount.toLocaleString()} submitted — awaiting processing.`);
       setOk("Withdrawal request submitted! Admin will process it shortly.");
       setTimeout(() => {
         onDone();
@@ -62,18 +64,18 @@ export default function WithdrawModal({ investment, userId, onClose, onDone }) {
       }, 2000);
     } catch (e) {
       console.error(e);
-      setErr("Could not submit withdrawal. Please try again.");
+      setErr(e.message || "Could not submit withdrawal. Please try again.");
     }
     setBusy(false);
   }
 
   return (
     <Overlay onClose={onClose}>
-      <h2 style={{ fontSize: 18, fontWeight: 800, color: C.emerald, marginBottom: 4 }}>
-        Request Withdrawal
+      <h2 style={{ fontSize: 18, fontWeight: 800, color: C.crimson, marginBottom: 4 }}>
+        Withdraw Bonus Balance
       </h2>
       <p style={{ fontSize: 13, color: C.muted, marginBottom: 18 }}>
-        Only profit can be withdrawn — your capital stays invested.
+        Referral and welcome bonuses combined.
       </p>
 
       {!withinHours && (
@@ -94,8 +96,8 @@ export default function WithdrawModal({ investment, userId, onClose, onDone }) {
 
       <div
         style={{
-          background: `${investment.plan.color}10`,
-          border: `1px solid ${investment.plan.color}25`,
+          background: `${C.crimson}10`,
+          border: `1px solid ${C.crimson}25`,
           borderRadius: 12,
           padding: 14,
           marginBottom: 20,
@@ -103,12 +105,8 @@ export default function WithdrawModal({ investment, userId, onClose, onDone }) {
         }}
       >
         <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
-          <span style={{ color: C.dim }}>Plan</span>
-          <span style={{ color: investment.plan.color }}>{investment.plan.label}</span>
-        </div>
-        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
-          <span style={{ color: C.dim }}>Available Profit</span>
-          <span style={{ color: C.emerald, fontWeight: 700 }}>₦{investment.withdrawableBalance.toLocaleString()}</span>
+          <span style={{ color: C.dim }}>Available Bonus Balance</span>
+          <span style={{ color: C.crimson, fontWeight: 700 }}>₦{availableBalance.toLocaleString()}</span>
         </div>
         <div style={{ display: "flex", justifyContent: "space-between" }}>
           <span style={{ color: C.dim }}>Minimum Withdrawal</span>

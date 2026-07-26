@@ -13,9 +13,9 @@ export const BANKS = [
 
 // OPay account details for manual deposits — unchanged from the original spec.
 export const OPAY_DETAILS = {
-  bank: "OPay",
-  accountNumber: "7042649274",
-  accountName: "Aduma Pleasure John",
+  bank: "Wema Bank",
+  accountNumber: "0292414729",
+  accountName: "Abasifreke Sunday Effiong",
 };
 
 // WhatsApp support/community group link, used on the Dashboard welcome

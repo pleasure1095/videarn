@@ -10,7 +10,7 @@ html {
   text-size-adjust: 100%;
 }
 body {
-  background: #0A0D0B;
+  background: #100C0D;
   font-family: system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   font-size: 15px;
@@ -24,7 +24,7 @@ button {
 }
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: rgba(255,255,255,0.03); }
-::-webkit-scrollbar-thumb { background: #2ECC7140; border-radius: 3px; }
+::-webkit-scrollbar-thumb { background: rgba(184,40,61,0.4); border-radius: 3px; }
 
 button:disabled {
   cursor: not-allowed !important;
@@ -37,26 +37,19 @@ button:disabled {
 }
 .fade { animation: fadeIn 0.3s ease; }
 
-/* Responsive grids used by Dashboard stat cards and VIP plan cards.
-   2 columns by default, collapsing to 1 on very narrow phones so cards
-   never feel cramped or force horizontal shrinking. */
+/* Responsive grid used by Dashboard stat cards. VIP plans now use a
+   horizontal-scroll flex layout (see VipPlansPage.jsx) instead of a grid,
+   so no .plan-grid class is needed anymore. */
 .stat-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 12px;
 }
-.plan-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 14px;
-}
 @media (min-width: 700px) {
   .stat-grid { grid-template-columns: repeat(3, 1fr); }
-  .plan-grid { grid-template-columns: repeat(3, 1fr); }
 }
 @media (max-width: 380px) {
   .stat-grid { grid-template-columns: 1fr; }
-  .plan-grid { grid-template-columns: 1fr; }
 }
 
 .admin-grid {

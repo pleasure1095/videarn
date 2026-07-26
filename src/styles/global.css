@@ -40,16 +40,60 @@ button:disabled {
 /* Responsive grid used by Dashboard stat cards. VIP plans now use a
    horizontal-scroll flex layout (see VipPlansPage.jsx) instead of a grid,
    so no .plan-grid class is needed anymore. */
-.stat-grid {
+/* "Major" balance cards (Total Earnings, Withdrawable Profit, Welcome
+   Bonus, Referral Bonus) — always 2 columns so they stay balanced side by
+   side, never collapsing to a single stacked column regardless of screen
+   width, per the site owner's request that these lead figures always
+   have visual weight. */
+.major-stat-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 12px;
 }
-@media (min-width: 700px) {
-  .stat-grid { grid-template-columns: repeat(3, 1fr); }
+
+/* Auto-scrolling stat row: all 8 dashboard stats flow horizontally and
+   loop continuously on their own, no swipe/drag required. The track is
+   the full stat list duplicated once (see DashboardPage.jsx) and
+   animated from 0 to -50% so it loops seamlessly; hovering/touching
+   pauses it so a user reading a specific number isn't fighting the
+   motion. prefers-reduced-motion users get a static, swipeable row
+   instead, since continuous motion can be genuinely uncomfortable for
+   that group — accessibility takes priority over the animation here. */
+.stat-scroll-viewport {
+  overflow: hidden;
+  width: 100%;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 24px, #000 calc(100% - 24px), transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 24px, #000 calc(100% - 24px), transparent);
 }
-@media (max-width: 380px) {
-  .stat-grid { grid-template-columns: 1fr; }
+.stat-scroll-track {
+  display: flex;
+  gap: 12px;
+  width: max-content;
+  animation: statScroll 28s linear infinite;
+}
+.stat-scroll-viewport:hover .stat-scroll-track,
+.stat-scroll-viewport:active .stat-scroll-track {
+  animation-play-state: paused;
+}
+.stat-scroll-track.stat-scroll-paused {
+  animation-play-state: paused;
+}
+.stat-scroll-card {
+  flex: 0 0 auto;
+  min-width: 132px;
+  background: linear-gradient(160deg, rgba(184,40,61,0.16), rgba(16,12,13,0.7));
+  border-radius: 14px;
+  padding: 14px 16px;
+}
+@keyframes statScroll {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .stat-scroll-track {
+    animation: none;
+    overflow-x: auto;
+  }
 }
 
 .admin-grid {

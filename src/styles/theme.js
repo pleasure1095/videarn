@@ -2,19 +2,24 @@
 // request. Business logic (VIP plans, earnings rules, withdrawal limits)
 // is entirely unaffected by this file — this is visual tokens only.
 export const C = {
-  charcoal: "#181214",
-  charcoalDeep: "#100C0D",
+  charcoal: "#211A1D",
+  charcoalDeep: "#171215",
   crimson: "#B8283D",
   crimsonDeep: "#8C1E2E",
   cream: "#F3E9DD",
   creamDeep: "#E4D3BC",
   green: "#3DBE6C",
   red: "#E0685E",
-  bg: "#100C0D",
-  surface: "rgba(255,255,255,0.05)",
+  bg: "#171215",
+  surface: "rgba(255,255,255,0.065)",
   border: "rgba(184,40,61,0.22)",
   muted: "#C9B8AE",
-  dim: "#7A6B64",
+  dim: "#8C7D75",
+  // Subtle tech accent for the "gadget hub" feel on the Dashboard header
+  // only — kept separate from the crimson brand palette rather than
+  // replacing it, so the rest of the app (auth, admin, forms) is
+  // untouched and the accent reads as a deliberate, contained detail.
+  techGlow: "#5AD1E0",
   // Aliases kept so existing components referencing earlier palette names
   // don't need every single call site rewritten — they now resolve to the
   // crimson/cream equivalents instead.

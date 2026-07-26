@@ -93,3 +93,41 @@ export async function creditReferralBonusIfEligible(depositUserId, planDaily) {
 
   return { credited: true, referrer, bonus: planDaily };
 }
+
+/**
+ * Withdraws from a user's combined bonus balance (referralBonusTotal +
+ * welcomeBonus). This is separate from the per-investment withdrawal path
+ * in services/deposits.js because bonus money isn't tied to any specific
+ * VIP deposit — it lives directly on the user profile. Uses a transaction
+ * so the balance check and decrement happen atomically, closing the same
+ * class of race condition as creditReferralBonusIfEligible (e.g. rapid
+ * double-tapping the withdraw button).
+ *
+ * Deducts from referralBonusTotal first, then welcomeBonus, for any
+ * amount that doesn't fit in referralBonusTotal alone — the split doesn't
+ * matter functionally since both are pooled into one withdrawable total
+ * anywhere they're displayed, this just picks a consistent order.
+ */
+export async function withdrawBonusBalance(uid, amount) {
+  const userRef = doc(db, USERS_COLLECTION, uid);
+  await runTransaction(db, async (transaction) => {
+    const snap = await transaction.get(userRef);
+    if (!snap.exists()) throw new Error("User not found.");
+    const data = snap.data();
+    const referralBonusTotal = data.referralBonusTotal || 0;
+    const welcomeBonus = data.welcomeBonus || 0;
+    const totalAvailable = referralBonusTotal + welcomeBonus;
+
+    if (amount > totalAvailable) {
+      throw new Error(`This exceeds your available bonus balance of ₦${totalAvailable.toLocaleString()}.`);
+    }
+
+    const fromReferral = Math.min(referralBonusTotal, amount);
+    const fromWelcome = amount - fromReferral;
+
+    transaction.update(userRef, {
+      referralBonusTotal: referralBonusTotal - fromReferral,
+      welcomeBonus: welcomeBonus - fromWelcome,
+    });
+  });
+}

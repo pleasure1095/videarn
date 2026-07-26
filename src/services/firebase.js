@@ -28,7 +28,7 @@ const missingKeys = Object.entries(firebaseConfig)
 
 if (missingKeys.length > 0) {
   const message =
-    "VIDEARN configuration error: missing Firebase settings (" +
+    "GADJIZ configuration error: missing Firebase settings (" +
     missingKeys.join(", ") +
     "). Check that all VITE_FIREBASE_* environment variables are set correctly in your hosting provider, then redeploy.";
 
@@ -50,7 +50,7 @@ try {
   app = initializeApp(firebaseConfig);
 } catch (err) {
   const message =
-    "VIDEARN failed to initialize Firebase. This usually means one of the VITE_FIREBASE_* environment variables has an incorrect value (a typo, extra quote marks, or a truncated string). Original error: " +
+    "GADJIZ failed to initialize Firebase. This usually means one of the VITE_FIREBASE_* environment variables has an incorrect value (a typo, extra quote marks, or a truncated string). Original error: " +
     err.message;
 
   document.body.innerHTML =

@@ -49,13 +49,25 @@ export async function getAllDeposits() {
  * Uploads an optional payment screenshot to Firebase Storage and returns
  * its download URL. Returns null if no file is provided — screenshots are
  * optional as long as a transaction reference is supplied instead.
+ *
+ * Upload failures here (e.g. Storage not yet enabled/configured on this
+ * Firebase project) are intentionally non-fatal: they're logged and
+ * swallowed rather than thrown, since a working transaction reference
+ * should be enough to submit a deposit even if the screenshot upload
+ * itself couldn't complete. The caller (submitDeposit) still requires at
+ * least one proof method before allowing submission at all.
  */
 async function uploadScreenshot(userId, file) {
   if (!file) return null;
-  const path = `deposit-screenshots/${userId}/${Date.now()}-${file.name}`;
-  const storageRef = ref(storage, path);
-  await uploadBytes(storageRef, file);
-  return getDownloadURL(storageRef);
+  try {
+    const path = `deposit-screenshots/${userId}/${Date.now()}-${file.name}`;
+    const storageRef = ref(storage, path);
+    await uploadBytes(storageRef, file);
+    return getDownloadURL(storageRef);
+  } catch (err) {
+    console.error("Screenshot upload failed (continuing without it):", err);
+    return null;
+  }
 }
 
 /**
@@ -63,13 +75,17 @@ async function uploadScreenshot(userId, file) {
  * VIPS (utils/vipPlans.js) — amount and daily rate are derived from that
  * shared source rather than trusted from the caller, so a tampered client
  * request can't submit an arbitrary amount.
+ *
+ * Proof of payment is primarily the sender's name and the amount they
+ * report paying — simpler for users than requiring a transaction
+ * reference or screenshot, which are now optional extras that speed up
+ * admin review but aren't required to submit.
  */
-export async function submitDeposit({ userId, userName, userEmail, planId, senderName, proof, txRef, screenshotFile }) {
+export async function submitDeposit({ userId, userName, userEmail, planId, senderName, amountPaid, proof, txRef, screenshotFile }) {
   const plan = VIPS[planId];
   if (!plan) throw new Error("Invalid VIP plan selected.");
-  if (!txRef?.trim() && !screenshotFile) {
-    throw new Error("Provide a transaction reference or upload a payment screenshot.");
-  }
+  if (!senderName?.trim()) throw new Error("Enter the name used for the transfer.");
+  if (!amountPaid || amountPaid <= 0) throw new Error("Enter the amount you paid.");
 
   const screenshotUrl = await uploadScreenshot(userId, screenshotFile);
   const reference = genRef();
@@ -84,7 +100,8 @@ export async function submitDeposit({ userId, userName, userEmail, planId, sende
     planDaily: plan.daily,
     amount: plan.amount,
     senderName: senderName.trim(),
-    proof: proof.trim(),
+    amountPaid,
+    proof: proof?.trim() || "",
     txRef: txRef?.trim() || "",
     screenshotUrl,
     status: "pending",

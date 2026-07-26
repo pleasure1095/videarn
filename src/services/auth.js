@@ -20,6 +20,7 @@ import { auth, db } from "./firebase";
 import { genReferralCode } from "../utils/referral";
 
 const USERS_COLLECTION = "users";
+export const WELCOME_BONUS = 500;
 
 /**
  * Fetches a user's Firestore profile document by uid.
@@ -84,6 +85,14 @@ export async function registerUser({ name, email, password, phone, refCode }) {
     referralCode,
     referrerCode,
     referralBonusTotal: 0,
+    // ₦500 welcome bonus, credited once at registration only — existing
+    // users created before this feature don't have this field, which is
+    // intentional (confirmed: no retroactive credit for pre-existing
+    // accounts). Treated identically to referralBonusTotal for balance
+    // and withdrawal purposes: always part of the overall withdrawable
+    // total, subject to the same ₦1,200 minimum withdrawal rule as
+    // everything else — not a separate pot with its own rules.
+    welcomeBonus: WELCOME_BONUS,
     firstVipRewarded: false,
     createdAt: Date.now(),
   };

@@ -50,6 +50,7 @@ export default function DashboardPage() {
   const [preselectedPlanId, setPreselectedPlanId] = useState(null);
   const [withdrawTarget, setWithdrawTarget] = useState(null);
   const [showBonusWithdraw, setShowBonusWithdraw] = useState(false);
+  const [statScrollPaused, setStatScrollPaused] = useState(false);
   const [tick, setTick] = useState(0);
 
   async function load() {
@@ -158,11 +159,31 @@ export default function DashboardPage() {
 
   return (
     <div>
-      <h2 style={{ fontSize: 18, fontWeight: 800, marginBottom: 18, color: "#F3E9DD" }}>
+      <h2
+        style={{
+          fontSize: 18,
+          fontWeight: 800,
+          marginBottom: 18,
+          color: "#F3E9DD",
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 8,
+        }}
+      >
+        <span
+          style={{
+            width: 8,
+            height: 8,
+            borderRadius: "50%",
+            background: C.techGlow,
+            boxShadow: `0 0 8px ${C.techGlow}`,
+            display: "inline-block",
+          }}
+        />
         Dashboard
       </h2>
 
-      <WelcomeBanner userName={user.name} />
+      <WelcomeBanner />
 
       {pending.length > 0 && (
         <div
@@ -195,31 +216,81 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Summary stat cards — balance and referral figures shown first,
-          per the site owner's request to lead with these rather than
-          promo/engagement content. */}
-      <div
-        style={{ marginBottom: 24 }}
-        className="stat-grid"
-      >
-        {[
-          { label: "Total Investment", value: `₦${fmt(totalInvested)}`, color: C.emerald },
-          { label: "Daily Earnings", value: `₦${fmt(totalDaily)}`, color: C.green },
-          { label: "Total Earnings", value: `₦${fmt(totalAvailableEarnings)}`, color: C.lime },
-          { label: "Missed (Unreviewed)", value: `₦${fmt(totalMissedEarnings)}`, color: C.dim },
-          { label: "Referral Bonus", value: `₦${fmt(referralBonus)}`, color: C.forest },
-          { label: "Welcome Bonus", value: `₦${fmt(welcomeBonus)}`, color: "#D4506A" },
-          { label: "Withdrawable Profit", value: `₦${fmt(totalWithdrawableProfit + referralBonus + welcomeBonus)}`, color: C.emerald },
-          { label: "Active VIP Plans", value: investments.length, color: C.green },
-        ].map((s, i) => (
-          <div key={i} style={{ ...cardStyle, border: `1px solid ${s.color}28`, padding: 16 }}>
-            <div style={{ fontSize: 10, letterSpacing: "0.1em", color: C.dim, textTransform: "uppercase", marginBottom: 8 }}>
-              {s.label}
+      {/* Balance & bonus overview — 4 "major" figures get real visual
+          weight up top (Total Earnings, Withdrawable Profit, Welcome
+          Bonus, Referral Bonus), then ALL 8 stats (majors + the rest)
+          flow together in a single auto-scrolling row below. No swipe
+          needed — the row scrolls itself continuously and loops, so a
+          narrow phone screen doesn't collapse everything into one long
+          column. The full data array is defined once and reused by both
+          rows so the two views can never drift out of sync with each
+          other. */}
+      {(() => {
+        const allStats = [
+          { key: "totalInvestment", label: "Total Investment", value: `₦${fmt(totalInvested)}`, color: C.emerald },
+          { key: "dailyEarnings", label: "Daily Earnings", value: `₦${fmt(totalDaily)}`, color: C.green },
+          { key: "totalEarnings", label: "Total Earnings", value: `₦${fmt(totalAvailableEarnings)}`, color: C.lime },
+          { key: "missed", label: "Missed (Unreviewed)", value: `₦${fmt(totalMissedEarnings)}`, color: C.dim },
+          { key: "referralBonus", label: "Referral Bonus", value: `₦${fmt(referralBonus)}`, color: C.forest },
+          { key: "welcomeBonus", label: "Welcome Bonus", value: `₦${fmt(welcomeBonus)}`, color: "#D4506A" },
+          { key: "withdrawable", label: "Withdrawable Profit", value: `₦${fmt(totalWithdrawableProfit + referralBonus + welcomeBonus)}`, color: C.emerald },
+          { key: "activePlans", label: "Active VIP Plans", value: investments.length, color: C.green },
+        ];
+        const majorKeys = new Set(["totalEarnings", "withdrawable", "welcomeBonus", "referralBonus"]);
+        const majorStats = allStats.filter((s) => majorKeys.has(s.key));
+        // Duplicated once so the CSS scroll-loop animation can slide from
+        // 0% to -50% and land back exactly where it started, giving a
+        // seamless infinite loop instead of a visible jump/reset.
+        const loopStats = [...allStats, ...allStats];
+
+        return (
+          <>
+            <div className="major-stat-grid" style={{ marginBottom: 16 }}>
+              {majorStats.map((s) => (
+                <div key={s.key} style={{ ...cardStyle, border: `1px solid ${s.color}35`, padding: 18 }}>
+                  <div style={{ fontSize: 10.5, letterSpacing: "0.1em", color: C.dim, textTransform: "uppercase", marginBottom: 8, fontWeight: 700 }}>
+                    {s.label}
+                  </div>
+                  <div style={{ fontSize: 23, fontWeight: 800, color: s.color }}>{s.value}</div>
+                </div>
+              ))}
             </div>
-            <div style={{ fontSize: 20, fontWeight: 800, color: s.color }}>{s.value}</div>
-          </div>
-        ))}
-      </div>
+
+            <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 6 }}>
+              <button
+                onClick={() => setStatScrollPaused((p) => !p)}
+                style={{
+                  background: "none",
+                  border: "none",
+                  color: C.dim,
+                  fontSize: 10.5,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  padding: "2px 6px",
+                  minHeight: "auto",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 4,
+                }}
+              >
+                {statScrollPaused ? "▶ Resume scroll" : "⏸ Pause scroll"}
+              </button>
+            </div>
+            <div className="stat-scroll-viewport" style={{ marginBottom: 24 }}>
+              <div className={`stat-scroll-track${statScrollPaused ? " stat-scroll-paused" : ""}`}>
+                {loopStats.map((s, i) => (
+                  <div key={`${s.key}-${i}`} className="stat-scroll-card" style={{ border: `1px solid ${s.color}28` }}>
+                    <div style={{ fontSize: 9.5, letterSpacing: "0.08em", color: C.dim, textTransform: "uppercase", marginBottom: 6, whiteSpace: "nowrap" }}>
+                      {s.label}
+                    </div>
+                    <div style={{ fontSize: 16, fontWeight: 800, color: s.color, whiteSpace: "nowrap" }}>{s.value}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </>
+        );
+      })()}
 
       {(referralBonus + welcomeBonus) > 0 && (
         <div

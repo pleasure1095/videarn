@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { reauthenticateUser } from "../services/auth";
 import { C, buttonStyle, cardStyle, labelStyle } from "../styles/theme";
+import { WHATSAPP_GROUP_LINK } from "../utils/paymentInfo";
 import FormInput from "../components/FormInput";
 import { ErrorBox, SuccessBox } from "../components/MessageBox";
 
@@ -217,7 +218,7 @@ export default function SettingsPage() {
           <span style={{ fontSize: 13, color: "#F3E9DD" }}>{APP_VERSION}</span>
         </div>
         <a
-          href="https://wa.me/2347042749274"
+          href={WHATSAPP_GROUP_LINK}
           target="_blank"
           rel="noopener noreferrer"
           style={{

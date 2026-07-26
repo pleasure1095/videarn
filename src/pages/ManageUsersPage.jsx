@@ -85,7 +85,7 @@ export default function ManageUsersPage() {
 
   return (
     <div>
-      <h2 style={{ fontSize: 18, fontWeight: 400, marginBottom: 8, fontFamily: "Georgia,serif" }}>
+      <h2 style={{ fontSize: 18, fontWeight: 800, marginBottom: 8 }}>
         Manage Users
       </h2>
       <p style={{ fontSize: 13, color: C.muted, marginBottom: 20 }}>
@@ -135,7 +135,7 @@ export default function ManageUsersPage() {
             >
               <div>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4, flexWrap: "wrap" }}>
-                  <span style={{ fontSize: 14, color: "#E4F0E7", fontWeight: 500 }}>{u.name}</span>
+                  <span style={{ fontSize: 14, color: "#F3E9DD", fontWeight: 500 }}>{u.name}</span>
                   <span style={chipStyle(u.role === "admin" ? C.red : C.green)}>
                     {u.role === "admin" ? "ADMIN" : "USER"}
                   </span>

@@ -99,11 +99,12 @@ export default function AuthPage() {
         style={{
           width: "100%",
           maxWidth: 440,
-          background: "rgba(255,255,255,0.03)",
-          border: `1px solid ${C.emerald}30`,
+          background: "linear-gradient(160deg, rgba(30,58,110,0.5), rgba(15,27,60,0.7))",
+          border: `1px solid ${C.gold}30`,
           borderRadius: 20,
           padding: "44px 28px",
           backdropFilter: "blur(20px)",
+          boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
         }}
         className="fade"
       >
@@ -113,16 +114,15 @@ export default function AuthPage() {
         <h1
           style={{
             fontSize: 28,
-            fontWeight: 400,
-            color: C.emerald,
+            fontWeight: 800,
+            color: C.gold,
             marginBottom: 6,
-            fontFamily: "Georgia,serif",
             textAlign: "center",
           }}
         >
           {mode === "login" ? "Welcome back" : "Create account"}
         </h1>
-        <p style={{ fontSize: 14, color: C.muted, marginBottom: 28, textAlign: "center" }}>
+        <p style={{ fontSize: 14, color: C.muted, marginBottom: 28, textAlign: "center", fontWeight: 600 }}>
           {mode === "login" ? "Sign in to your portfolio" : "Start growing your wealth today"}
         </p>
 

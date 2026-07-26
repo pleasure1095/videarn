@@ -35,7 +35,7 @@ export default function NotificationsPage() {
 
   return (
     <div>
-      <h2 style={{ fontSize: 18, fontWeight: 400, marginBottom: 18, fontFamily: "Georgia,serif" }}>
+      <h2 style={{ fontSize: 18, fontWeight: 800, marginBottom: 18 }}>
         Notifications
       </h2>
       {notifs.length === 0 ? (
@@ -48,7 +48,7 @@ export default function NotificationsPage() {
             <div key={n.id} style={{ ...cardStyle, padding: 16, display: "flex", gap: 12, alignItems: "flex-start" }}>
               <div style={{ fontSize: 20 }}>{iconFor(n.type)}</div>
               <div>
-                <div style={{ fontSize: 13, color: "#E4F0E7" }}>{n.msg}</div>
+                <div style={{ fontSize: 13, color: "#F3E9DD" }}>{n.msg}</div>
                 <div style={{ fontSize: 11, color: C.dim, marginTop: 4 }}>{fmtDate(n.ts)}</div>
               </div>
             </div>

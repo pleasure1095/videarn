@@ -25,7 +25,7 @@ export default function ReferralsPage() {
 
   return (
     <div>
-      <h2 style={{ fontSize: 18, fontWeight: 400, marginBottom: 18, fontFamily: "Georgia,serif" }}>
+      <h2 style={{ fontSize: 18, fontWeight: 800, marginBottom: 18 }}>
         Referrals
       </h2>
 
@@ -40,7 +40,7 @@ export default function ReferralsPage() {
           <div style={{ fontSize: 10, letterSpacing: "0.1em", color: C.dim, textTransform: "uppercase", marginBottom: 8 }}>
             Total Referral Bonus
           </div>
-          <div style={{ fontSize: 20, fontWeight: 300, color: C.green }}>₦{(user.referralBonusTotal || 0).toLocaleString()}</div>
+          <div style={{ fontSize: 20, fontWeight: 800, color: C.green }}>₦{(user.referralBonusTotal || 0).toLocaleString()}</div>
         </div>
       </div>
 

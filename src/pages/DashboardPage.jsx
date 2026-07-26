@@ -2,13 +2,22 @@ import { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { C, buttonStyle, cardStyle } from "../styles/theme";
 import { VIPS, VIP_LIST } from "../utils/vipPlans";
-import { calculateInvestmentEarnings } from "../utils/earnings";
+import { calculateInvestmentEarnings, getDaysEarning } from "../utils/earnings";
 import { isWithinWithdrawalHours } from "../utils/paymentInfo";
 import { getUserDeposits } from "../services/deposits";
+import { getReviewStatus, countReviewedEarningDays } from "../services/reviews";
 import PlanCarousel from "../components/PlanCarousel";
 import EarnersTicker from "../components/EarnersTicker";
+import CheckInWidget from "../components/CheckInWidget";
+import DailyReviewsWidget from "../components/DailyReviewsWidget";
+import PromoBanner from "../components/PromoBanner";
+import ActionGrid from "../components/ActionGrid";
+import ActivityFeed from "../components/ActivityFeed";
+import WelcomeBanner from "../components/WelcomeBanner";
 import DepositModal from "../components/DepositModal";
 import WithdrawModal from "../components/WithdrawModal";
+import BonusWithdrawModal from "../components/BonusWithdrawModal";
+import { getActivityFeed } from "../services/activityFeed";
 
 function chipStyle(color) {
   return {
@@ -34,15 +43,24 @@ function fmtDate(ts) {
 export default function DashboardPage() {
   const { user, refreshUser } = useAuth();
   const [deposits, setDeposits] = useState([]);
+  const [activityEvents, setActivityEvents] = useState([]);
+  const [completedReviewDays, setCompletedReviewDays] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showDeposit, setShowDeposit] = useState(false);
+  const [preselectedPlanId, setPreselectedPlanId] = useState(null);
   const [withdrawTarget, setWithdrawTarget] = useState(null);
+  const [showBonusWithdraw, setShowBonusWithdraw] = useState(false);
   const [tick, setTick] = useState(0);
 
   async function load() {
     try {
       const all = await getUserDeposits(user.uid);
       setDeposits(all);
+      // Reuses the deposits we just fetched rather than querying twice.
+      const events = await getActivityFeed(user.uid, all);
+      setActivityEvents(events);
+      const reviewStatus = await getReviewStatus(user.uid);
+      setCompletedReviewDays(reviewStatus.completedDays);
       // Also refresh the user profile — referralBonusTotal can change from
       // an admin approving someone else's deposit (this user acting as the
       // referrer), which this session wouldn't otherwise see until re-login.
@@ -71,20 +89,66 @@ export default function DashboardPage() {
   const pending = deposits.filter((d) => d.status === "pending");
   const rejected = deposits.filter((d) => d.status === "rejected");
 
+  // VIP membership for check-in eligibility: having at least one deposit
+  // that was EVER approved, regardless of whether that specific investment
+  // is still active, fully withdrawn, or otherwise — membership, once
+  // earned, doesn't expire.
+  const isVipMember = approved.length > 0;
+
+  // "Migrate" suggests the next tier above the user's current highest
+  // active plan, since GADJIZ plans don't expire (unlike the reference
+  // design's 30-day cycles) — this is just a friendlier entry point into
+  // the same deposit flow as a fresh deposit, defaulting to an upgrade
+  // rather than starting back at VIP 1.
+  function openMigrate() {
+    const ownedPlanIds = new Set(deposits.filter((d) => d.status === "approved" || d.status === "pending").map((d) => d.planId));
+    const nextTier = VIP_LIST.find((p) => !ownedPlanIds.has(p.id));
+    setPreselectedPlanId(nextTier ? nextTier.id : VIP_LIST[VIP_LIST.length - 1].id);
+    setShowDeposit(true);
+  }
+
+  function openNewDeposit() {
+    setPreselectedPlanId(null);
+    setShowDeposit(true);
+  }
+
+  // Picks the investment with the largest withdrawable balance as the
+  // default target when withdrawing via the quick-action grid (which,
+  // unlike the per-investment withdraw button, has no specific investment
+  // context of its own). If nothing is withdrawable yet, this is a no-op —
+  // there's nothing sensible to open.
+  function openQuickWithdraw() {
+    const best = [...investments].sort((a, b) => b.withdrawableBalance - a.withdrawableBalance)[0];
+    if (best && best.withdrawableBalance > 0) setWithdrawTarget(best);
+  }
+
+  function openSupport() {
+    window.open("https://wa.me/2347042749274", "_blank", "noopener,noreferrer");
+  }
+
   // Enrich each approved deposit with live earnings figures using the
   // shared calculation utility — the single source of truth for the
-  // 24h-delay, capital-locked, profit-only-withdrawal rules.
+  // 24h-delay, capital-locked, profit-only-withdrawal, and daily-review
+  // gate rules. Computing this needs two passes: first getDaysEarning() to
+  // know how many earning-days have elapsed, then countReviewedEarningDays()
+  // to see how many of those specific days the user fully completed their
+  // product reviews, before calculateInvestmentEarnings() can determine
+  // how much is actually available (unreviewed days earn ₦0, permanently).
   const investments = approved.map((d) => {
     const plan = VIPS[d.planId] || { label: d.planLabel, daily: d.planDaily, color: C.emerald };
-    const calc = calculateInvestmentEarnings(d.planDaily, d.approvedAt, d.lifetimeWithdrawn || 0);
+    const daysEarningSoFar = getDaysEarning(d.approvedAt);
+    const reviewedDayCount = countReviewedEarningDays(d.approvedAt, daysEarningSoFar, completedReviewDays);
+    const calc = calculateInvestmentEarnings(d.planDaily, d.approvedAt, d.lifetimeWithdrawn || 0, reviewedDayCount);
     return { ...d, plan, ...calc };
   });
 
   const totalInvested = investments.reduce((s, i) => s + i.amount, 0);
   const totalDaily = investments.reduce((s, i) => s + i.plan.daily, 0);
-  const totalEarnings = investments.reduce((s, i) => s + i.totalEarnings, 0);
+  const totalAvailableEarnings = investments.reduce((s, i) => s + i.availableEarnings, 0);
   const totalWithdrawableProfit = investments.reduce((s, i) => s + i.withdrawableBalance, 0);
+  const totalMissedEarnings = investments.reduce((s, i) => s + i.missedEarnings, 0);
   const referralBonus = user.referralBonusTotal || 0;
+  const welcomeBonus = user.welcomeBonus || 0;
 
   const withinHours = isWithinWithdrawalHours();
 
@@ -94,12 +158,11 @@ export default function DashboardPage() {
 
   return (
     <div>
-      <h2 style={{ fontSize: 18, fontWeight: 400, marginBottom: 18, fontFamily: "Georgia,serif" }}>
+      <h2 style={{ fontSize: 18, fontWeight: 800, marginBottom: 18, color: "#F3E9DD" }}>
         Dashboard
       </h2>
 
-      <EarnersTicker />
-      <PlanCarousel />
+      <WelcomeBanner userName={user.name} />
 
       {pending.length > 0 && (
         <div
@@ -132,7 +195,9 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Summary stat cards */}
+      {/* Summary stat cards — balance and referral figures shown first,
+          per the site owner's request to lead with these rather than
+          promo/engagement content. */}
       <div
         style={{ marginBottom: 24 }}
         className="stat-grid"
@@ -140,25 +205,77 @@ export default function DashboardPage() {
         {[
           { label: "Total Investment", value: `₦${fmt(totalInvested)}`, color: C.emerald },
           { label: "Daily Earnings", value: `₦${fmt(totalDaily)}`, color: C.green },
-          { label: "Total Earnings", value: `₦${fmt(totalEarnings)}`, color: C.lime },
+          { label: "Total Earnings", value: `₦${fmt(totalAvailableEarnings)}`, color: C.lime },
+          { label: "Missed (Unreviewed)", value: `₦${fmt(totalMissedEarnings)}`, color: C.dim },
           { label: "Referral Bonus", value: `₦${fmt(referralBonus)}`, color: C.forest },
-          { label: "Withdrawable Profit", value: `₦${fmt(totalWithdrawableProfit + referralBonus)}`, color: C.emerald },
+          { label: "Welcome Bonus", value: `₦${fmt(welcomeBonus)}`, color: "#D4506A" },
+          { label: "Withdrawable Profit", value: `₦${fmt(totalWithdrawableProfit + referralBonus + welcomeBonus)}`, color: C.emerald },
           { label: "Active VIP Plans", value: investments.length, color: C.green },
         ].map((s, i) => (
           <div key={i} style={{ ...cardStyle, border: `1px solid ${s.color}28`, padding: 16 }}>
             <div style={{ fontSize: 10, letterSpacing: "0.1em", color: C.dim, textTransform: "uppercase", marginBottom: 8 }}>
               {s.label}
             </div>
-            <div style={{ fontSize: 20, fontWeight: 300, color: s.color }}>{s.value}</div>
+            <div style={{ fontSize: 20, fontWeight: 800, color: s.color }}>{s.value}</div>
           </div>
         ))}
       </div>
 
+      {(referralBonus + welcomeBonus) > 0 && (
+        <div
+          style={{
+            ...cardStyle,
+            border: `1px solid ${C.crimson}28`,
+            marginBottom: 24,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            flexWrap: "wrap",
+            gap: 12,
+          }}
+        >
+          <div>
+            <div style={{ fontSize: 12, color: C.dim, fontWeight: 600, marginBottom: 2 }}>
+              Referral + Welcome Bonus (not tied to any VIP plan)
+            </div>
+            <div style={{ fontSize: 20, fontWeight: 800, color: C.crimson }}>
+              ₦{fmt(referralBonus + welcomeBonus)}
+            </div>
+          </div>
+          <button
+            style={{ ...buttonStyle(withinHours && (referralBonus + welcomeBonus) > 0 ? "gold" : "ghost"), padding: "9px 20px", fontSize: 13 }}
+            onClick={() => setShowBonusWithdraw(true)}
+            disabled={!withinHours}
+          >
+            💰 {withinHours ? "Withdraw Bonus" : "Withdraw (8AM–10PM WAT only)"}
+          </button>
+        </div>
+      )}
+
+      <PromoBanner />
+      <ActionGrid
+        onDeposit={openNewDeposit}
+        onMigrate={openMigrate}
+        onWithdraw={openQuickWithdraw}
+        onSupport={openSupport}
+      />
+      <CheckInWidget userId={user.uid} isVipMember={isVipMember} />
+      <DailyReviewsWidget userId={user.uid} isVipMember={isVipMember} />
+      <EarnersTicker />
+      <PlanCarousel />
+
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18, flexWrap: "wrap", gap: 10 }}>
-        <h3 style={{ fontSize: 16, fontWeight: 400, fontFamily: "Georgia,serif" }}>My VIP Plans</h3>
-        <button style={{ ...buttonStyle("gold"), padding: "9px 18px", fontSize: 13 }} onClick={() => setShowDeposit(true)}>
-          + New Deposit
-        </button>
+        <h3 style={{ fontSize: 16, fontWeight: 800, color: "#F3E9DD" }}>My VIP Plans</h3>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {investments.length > 0 && (
+            <button style={{ ...buttonStyle("ghost"), padding: "9px 18px", fontSize: 13 }} onClick={openMigrate}>
+              ⇧ Migrate
+            </button>
+          )}
+          <button style={{ ...buttonStyle("gold"), padding: "9px 18px", fontSize: 13 }} onClick={openNewDeposit}>
+            + New Deposit
+          </button>
+        </div>
       </div>
 
       {investments.length === 0 ? (
@@ -173,9 +290,9 @@ export default function DashboardPage() {
           }}
         >
           <div style={{ fontSize: 36, marginBottom: 12 }}>📈</div>
-          <div style={{ fontSize: 15, color: C.dim, marginBottom: 8, fontFamily: "Georgia,serif" }}>No active VIP plans yet</div>
+          <div style={{ fontSize: 15, color: C.dim, marginBottom: 8 }}>No active VIP plans yet</div>
           <div style={{ fontSize: 13, color: "#4A5A50", marginBottom: 18 }}>Make a deposit and wait for admin approval</div>
-          <button style={{ ...buttonStyle("gold"), padding: "9px 20px" }} onClick={() => setShowDeposit(true)}>
+          <button style={{ ...buttonStyle("gold"), padding: "9px 20px" }} onClick={openNewDeposit}>
             Make First Deposit
           </button>
         </div>
@@ -200,9 +317,14 @@ export default function DashboardPage() {
                       Earnings begin 24h after approval
                     </div>
                   )}
+                  {inv.missedEarnings > 0 && (
+                    <div style={{ fontSize: 11, color: C.dim, marginTop: 4, fontWeight: 600 }}>
+                      ₦{fmt(inv.missedEarnings)} missed on unreviewed days
+                    </div>
+                  )}
                 </div>
                 <div style={{ textAlign: "right" }}>
-                  <div style={{ fontSize: 24, fontWeight: 300, color: C.green }}>₦{fmt(inv.withdrawableBalance)}</div>
+                  <div style={{ fontSize: 24, fontWeight: 800, color: C.green }}>₦{fmt(inv.withdrawableBalance)}</div>
                   <div style={{ fontSize: 11, color: C.dim }}>withdrawable profit</div>
                 </div>
               </div>
@@ -220,9 +342,11 @@ export default function DashboardPage() {
         </div>
       )}
 
+      <ActivityFeed events={activityEvents} />
+
       {deposits.length > 0 && (
         <>
-          <h3 style={{ fontSize: 15, fontWeight: 400, fontFamily: "Georgia,serif", marginBottom: 14, color: C.muted }}>
+          <h3 style={{ fontSize: 15, fontWeight: 800, color: C.muted, marginBottom: 14 }}>
             Deposit History
           </h3>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -249,7 +373,7 @@ export default function DashboardPage() {
                     </div>
                     <div style={{ fontSize: 11, color: C.muted }}>{fmtDate(d.submittedAt)}</div>
                   </div>
-                  <div style={{ fontSize: 18, fontWeight: 300, color: sc }}>₦{d.amount.toLocaleString()}</div>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: sc }}>₦{d.amount.toLocaleString()}</div>
                 </div>
               );
             })}
@@ -257,9 +381,27 @@ export default function DashboardPage() {
         </>
       )}
 
-      {showDeposit && <DepositModal user={user} onClose={() => setShowDeposit(false)} onDone={load} />}
+      {showDeposit && (
+        <DepositModal
+          user={user}
+          initialPlanId={preselectedPlanId}
+          onClose={() => {
+            setShowDeposit(false);
+            setPreselectedPlanId(null);
+          }}
+          onDone={load}
+        />
+      )}
       {withdrawTarget && (
         <WithdrawModal investment={withdrawTarget} userId={user.uid} onClose={() => setWithdrawTarget(null)} onDone={load} />
+      )}
+      {showBonusWithdraw && (
+        <BonusWithdrawModal
+          userId={user.uid}
+          availableBalance={referralBonus + welcomeBonus}
+          onClose={() => setShowBonusWithdraw(false)}
+          onDone={load}
+        />
       )}
     </div>
   );

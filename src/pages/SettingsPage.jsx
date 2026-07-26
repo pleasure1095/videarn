@@ -99,7 +99,7 @@ export default function SettingsPage() {
 
   return (
     <div style={{ maxWidth: 460 }}>
-      <h2 style={{ fontSize: 18, fontWeight: 400, marginBottom: 18, fontFamily: "Georgia,serif" }}>
+      <h2 style={{ fontSize: 18, fontWeight: 800, marginBottom: 18 }}>
         Settings
       </h2>
 
@@ -214,7 +214,7 @@ export default function SettingsPage() {
           }}
         >
           <span style={{ fontSize: 13, color: C.muted }}>App Version</span>
-          <span style={{ fontSize: 13, color: "#E4F0E7" }}>{APP_VERSION}</span>
+          <span style={{ fontSize: 13, color: "#F3E9DD" }}>{APP_VERSION}</span>
         </div>
         <a
           href="https://wa.me/2347042749274"

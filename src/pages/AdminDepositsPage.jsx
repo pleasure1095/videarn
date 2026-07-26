@@ -128,7 +128,7 @@ export default function AdminDepositsPage() {
 
   return (
     <div>
-      <h1 style={{ fontSize: 22, fontWeight: 400, marginBottom: 4, fontFamily: "Georgia,serif" }}>
+      <h1 style={{ fontSize: 22, fontWeight: 800, marginBottom: 4 }}>
         Deposit Management
       </h1>
       <p style={{ fontSize: 13, color: C.muted, marginBottom: 20 }}>Review and approve user deposit requests</p>
@@ -144,21 +144,21 @@ export default function AdminDepositsPage() {
         ].map((s, i) => (
           <div key={i} style={{ ...cardStyle, border: `1px solid ${s.color}28`, padding: 14 }}>
             <div style={{ fontSize: 10, color: C.dim, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 6 }}>{s.label}</div>
-            <div style={{ fontSize: 24, fontWeight: 300, color: s.color }}>{s.value}</div>
+            <div style={{ fontSize: 24, fontWeight: 800, color: s.color }}>{s.value}</div>
           </div>
         ))}
       </div>
 
       {pendingWithdrawals.length > 0 && (
         <>
-          <h3 style={{ fontSize: 15, color: C.muted, fontFamily: "Georgia,serif", marginBottom: 12 }}>
+          <h3 style={{ fontSize: 15, color: C.muted, marginBottom: 12 }}>
             Pending Withdrawal Requests
           </h3>
           <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 24 }}>
             {pendingWithdrawals.map((d) => (
               <div key={d.id} style={{ ...cardStyle, border: "1px solid rgba(123,158,217,0.3)", padding: 14 }}>
                 <div style={{ fontSize: 13, marginBottom: 8 }}>
-                  <strong style={{ color: "#E4F0E7" }}>{d.userName}</strong> — ₦{d.lastWithdrawalRequest.amount.toLocaleString()}
+                  <strong style={{ color: "#F3E9DD" }}>{d.userName}</strong> — ₦{d.lastWithdrawalRequest.amount.toLocaleString()}
                 </div>
                 <div style={{ fontSize: 12, color: C.muted, marginBottom: 10 }}>
                   {d.lastWithdrawalRequest.bank} · {d.lastWithdrawalRequest.accNo} · {d.lastWithdrawalRequest.accName}
@@ -204,14 +204,14 @@ export default function AdminDepositsPage() {
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 12 }}>
                   <div>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6, flexWrap: "wrap" }}>
-                      <span style={{ fontSize: 15, color: "#E4F0E7", fontWeight: 500 }}>{dep.userName}</span>
+                      <span style={{ fontSize: 15, color: "#F3E9DD", fontWeight: 500 }}>{dep.userName}</span>
                       <span style={chipStyle(sc)}>{dep.status.toUpperCase()}</span>
                     </div>
                     <div style={{ fontSize: 12, color: C.muted }}>{dep.userEmail}</div>
                     <div style={{ fontSize: 11, color: C.dim, marginTop: 2 }}>Submitted: {fmtDate(dep.submittedAt)}</div>
                   </div>
                   <div style={{ textAlign: "right" }}>
-                    <div style={{ fontSize: 22, fontWeight: 300, color: C.green }}>₦{dep.amount.toLocaleString()}</div>
+                    <div style={{ fontSize: 22, fontWeight: 800, color: C.green }}>₦{dep.amount.toLocaleString()}</div>
                     <div style={{ fontSize: 11, color: C.muted }}>{dep.planLabel} · ₦{dep.planDaily.toLocaleString()}/day</div>
                   </div>
                 </div>
@@ -224,15 +224,26 @@ export default function AdminDepositsPage() {
                   </div>
                   <div style={{ fontSize: 12, marginTop: 4 }}>
                     <span style={{ color: C.dim }}>Sender: </span>
-                    <span style={{ color: "#E4F0E7" }}>{dep.senderName}</span>
+                    <span style={{ color: "#F3E9DD" }}>{dep.senderName}</span>
                   </div>
+                  {dep.amountPaid != null && (
+                    <div style={{ fontSize: 12, marginTop: 4 }}>
+                      <span style={{ color: C.dim }}>Amount Paid (reported): </span>
+                      <span style={{ color: dep.amountPaid === dep.amount ? "#F3E9DD" : C.red, fontWeight: dep.amountPaid === dep.amount ? 400 : 700 }}>
+                        ₦{dep.amountPaid.toLocaleString()}
+                      </span>
+                      {dep.amountPaid !== dep.amount && (
+                        <span style={{ color: C.red }}> ⚠ expected ₦{dep.amount.toLocaleString()}</span>
+                      )}
+                    </div>
+                  )}
                   {dep.txRef && (
                     <div style={{ fontSize: 12, marginTop: 4 }}>
                       <span style={{ color: C.dim }}>Transaction ID: </span>
                       {dep.txRef}
                     </div>
                   )}
-                  <div style={{ fontSize: 12, color: C.muted, marginTop: 6 }}>{dep.proof}</div>
+                  {dep.proof && <div style={{ fontSize: 12, color: C.muted, marginTop: 6 }}>{dep.proof}</div>}
                   {dep.screenshotUrl && (
                     <div style={{ marginTop: 10 }}>
                       <img src={dep.screenshotUrl} alt="Payment proof" style={{ maxWidth: 200, borderRadius: 8, border: `1px solid ${C.border}` }} />

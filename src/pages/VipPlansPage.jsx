@@ -21,16 +21,30 @@ export default function VipPlansPage({ onJoined }) {
       <h2 style={{ fontSize: 22, fontWeight: 800, marginBottom: 6, color: "#F3E9DD" }}>VIP Plans</h2>
       <p style={{ fontSize: 13, color: C.muted, marginBottom: 20, fontWeight: 500 }}>
         Earnings begin 24 hours after admin approval. Only profit is ever withdrawable — capital
-        stays invested.
+        stays invested. Pay via OPay transfer.
       </p>
 
-      {/* Vertical stack — one full-width card per plan, in order, per the
-          site owner's request (previously a horizontal swipe row). */}
-      <div style={{ display: "flex", flexDirection: "column", gap: 14, marginBottom: 6 }}>
+      {/* Horizontal-scrolling card row, swipe to browse plans — matches
+          the reference design's app-style layout instead of a stacked grid. */}
+      <div
+        style={{
+          display: "flex",
+          gap: 14,
+          overflowX: "auto",
+          paddingBottom: 12,
+          marginBottom: 6,
+          scrollSnapType: "x mandatory",
+          WebkitOverflowScrolling: "touch",
+        }}
+      >
         {VIP_LIST.map((p, i) => (
           <div
             key={p.id}
             style={{
+              minWidth: 220,
+              maxWidth: 220,
+              flexShrink: 0,
+              scrollSnapAlign: "start",
               background: CARD_GRADIENTS[i % CARD_GRADIENTS.length],
               borderRadius: 18,
               padding: 20,
@@ -92,6 +106,7 @@ export default function VipPlansPage({ onJoined }) {
           </div>
         ))}
       </div>
+      <p style={{ fontSize: 11, color: C.dim, marginBottom: 20, fontWeight: 600 }}>← Swipe to see all 6 plans →</p>
 
       {showDeposit && (
         <DepositModal

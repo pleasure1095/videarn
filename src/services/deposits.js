@@ -148,7 +148,7 @@ export async function approveDeposit(deposit, adminNote = "") {
   await createNotification(
     deposit.userId,
     "approved",
-    `Your deposit of ₦${deposit.amount.toLocaleString()} (${deposit.planLabel}) has been approved and is now active. Earnings begin in 24 hours.`
+    `Your deposit of ₦${(deposit.amount || 0).toLocaleString()} (${deposit.planLabel}) has been approved and is now active. Earnings begin in 24 hours.`
   );
 
   if (referralResult.credited) {
@@ -176,7 +176,7 @@ export async function rejectDeposit(deposit, adminNote = "") {
   await createNotification(
     deposit.userId,
     "rejected",
-    `Your deposit of ₦${deposit.amount.toLocaleString()} (${deposit.ref}) was rejected.${adminNote ? " Reason: " + adminNote : ""}`
+    `Your deposit of ₦${(deposit.amount || 0).toLocaleString()} (${deposit.ref}) was rejected.${adminNote ? " Reason: " + adminNote : ""}`
   );
 }
 

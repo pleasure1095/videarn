@@ -49,12 +49,18 @@ export async function getActivityFeed(userId, deposits = null) {
   // stored events) — approximate one feed entry per approved deposit at
   // its approval moment, which is the one concrete, real timestamp we do
   // have for each investment.
+  //
+  // `d.amount || 0` guards against any deposit record missing this field
+  // (e.g. malformed/legacy data) — without this, a single bad record
+  // crashes the ENTIRE activity feed for that user with "Cannot read
+  // properties of undefined (reading 'toLocaleString')", taking down the
+  // whole Dashboard rather than just showing one odd-looking ₦0 entry.
   for (const d of depositList) {
     if (d.status === "approved" && d.approvedAt) {
       events.push({
         type: "approved_investment",
-        title: `${d.planLabel} activated`,
-        amount: d.amount.toLocaleString(),
+        title: `${d.planLabel || "VIP Plan"} activated`,
+        amount: (d.amount || 0).toLocaleString(),
         sign: null,
         ts: d.approvedAt,
       });

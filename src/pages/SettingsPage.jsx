@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { reauthenticateUser } from "../services/auth";
 import { C, buttonStyle, cardStyle, labelStyle } from "../styles/theme";
+import { WHATSAPP_GROUP_LINK, BANKS } from "../utils/paymentInfo";
 import FormInput from "../components/FormInput";
 import { ErrorBox, SuccessBox } from "../components/MessageBox";
 
@@ -17,7 +18,7 @@ const APP_VERSION = "1.0.0";
  * standard shape for a settings screen.
  */
 export default function SettingsPage() {
-  const { user, updateProfile, updatePassword, logout } = useAuth();
+  const { user, updateProfile, updateSavedBankDetails, updatePassword, logout } = useAuth();
   const [name, setName] = useState(user.name);
   const [phone, setPhone] = useState(user.phone || "");
   const [newPassword, setNewPassword] = useState("");
@@ -28,6 +29,14 @@ export default function SettingsPage() {
   const [pwErr, setPwErr] = useState("");
   const [pwOk, setPwOk] = useState("");
   const [busy, setBusy] = useState(false);
+
+  // Bank details for withdrawal auto-fill — hydrated from the saved
+  // profile if the user has set this before, otherwise blank.
+  const [bank, setBank] = useState(user.savedBankDetails?.bank || "");
+  const [accNo, setAccNo] = useState(user.savedBankDetails?.accNo || "");
+  const [accName, setAccName] = useState(user.savedBankDetails?.accName || "");
+  const [bankErr, setBankErr] = useState("");
+  const [bankOk, setBankOk] = useState("");
 
   async function saveProfile() {
     setProfileErr("");
@@ -43,6 +52,32 @@ export default function SettingsPage() {
     } catch (e) {
       console.error(e);
       setProfileErr("Could not update profile. Please try again.");
+    }
+    setBusy(false);
+  }
+
+  async function saveBank() {
+    setBankErr("");
+    setBankOk("");
+    if (!bank) {
+      setBankErr("Select your bank.");
+      return;
+    }
+    if (!/^\d{10}$/.test(accNo)) {
+      setBankErr("Account number must be 10 digits.");
+      return;
+    }
+    if (!accName.trim()) {
+      setBankErr("Enter the account name.");
+      return;
+    }
+    setBusy(true);
+    try {
+      await updateSavedBankDetails({ bank, accNo, accName: accName.trim() });
+      setBankOk("Bank details saved — they'll auto-fill on future withdrawals.");
+    } catch (e) {
+      console.error(e);
+      setBankErr("Could not save bank details. Please try again.");
     }
     setBusy(false);
   }
@@ -148,6 +183,64 @@ export default function SettingsPage() {
           marginBottom: 10,
         }}
       >
+        Bank Details
+      </h3>
+      <div style={{ ...cardStyle, marginBottom: 24 }}>
+        <p style={{ fontSize: 12, color: C.muted, marginBottom: 14 }}>
+          Save your bank details once — they'll auto-fill every time you request a withdrawal, so you don't have to retype them.
+        </p>
+        <ErrorBox msg={bankErr} />
+        <SuccessBox msg={bankOk} />
+        <div style={{ marginBottom: 14 }}>
+          <label style={labelStyle}>Bank Name</label>
+          <select
+            value={bank}
+            onChange={(e) => setBank(e.target.value)}
+            style={{
+              width: "100%",
+              padding: "12px 14px",
+              background: "#111A14",
+              border: "1px solid rgba(255,255,255,0.1)",
+              borderRadius: 8,
+              color: "#F9F1E7",
+              fontSize: 14,
+            }}
+          >
+            <option value="">— Select your bank —</option>
+            {BANKS.map((b) => (
+              <option key={b} value={b}>
+                {b}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div style={{ marginBottom: 14 }}>
+          <label style={labelStyle}>Account Number (10 digits)</label>
+          <FormInput
+            placeholder="0123456789"
+            value={accNo}
+            maxLength={10}
+            onChange={(e) => setAccNo(e.target.value.replace(/\D/g, "").slice(0, 10))}
+          />
+        </div>
+        <div style={{ marginBottom: 6 }}>
+          <label style={labelStyle}>Account Name</label>
+          <FormInput placeholder="As it appears on your bank account" value={accName} maxLength={60} onChange={(e) => setAccName(e.target.value)} />
+        </div>
+        <button style={{ ...buttonStyle("gold"), width: "100%", marginTop: 12 }} onClick={saveBank} disabled={busy}>
+          {user.savedBankDetails ? "Update Bank Details" : "Save Bank Details"}
+        </button>
+      </div>
+
+      <h3
+        style={{
+          fontSize: 11,
+          letterSpacing: "0.12em",
+          textTransform: "uppercase",
+          color: C.dim,
+          marginBottom: 10,
+        }}
+      >
         Security
       </h3>
       <div style={{ ...cardStyle, marginBottom: 24 }}>
@@ -214,10 +307,10 @@ export default function SettingsPage() {
           }}
         >
           <span style={{ fontSize: 13, color: C.muted }}>App Version</span>
-          <span style={{ fontSize: 13, color: "#F3E9DD" }}>{APP_VERSION}</span>
+          <span style={{ fontSize: 13, color: "#F9F1E7" }}>{APP_VERSION}</span>
         </div>
         <a
-          href="https://wa.me/2347042749274"
+          href={WHATSAPP_GROUP_LINK}
           target="_blank"
           rel="noopener noreferrer"
           style={{

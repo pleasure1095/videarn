@@ -21,6 +21,26 @@ function fmtDate(ts) {
   return new Date(ts).toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric" });
 }
 
+/**
+ * "Due" indicator for a pending withdrawal request — since there's no
+ * fixed SLA in the business rules (no promise like "paid within 24h"),
+ * this doesn't claim a hard deadline was missed. It just surfaces how
+ * long a request has been sitting, color-coded so an admin can triage at
+ * a glance instead of reading every timestamp: green under a day, amber
+ * 1-3 days, red past 3 days (a judgment threshold, easy to adjust if the
+ * site owner wants a stricter or looser cutoff).
+ */
+function withdrawalAge(requestedAt) {
+  const hoursAgo = (Date.now() - requestedAt) / (60 * 60 * 1000);
+  if (hoursAgo < 24) {
+    const h = Math.max(1, Math.floor(hoursAgo));
+    return { label: `${h}h ago`, color: "#3DBE6C" };
+  }
+  const days = Math.floor(hoursAgo / 24);
+  if (days <= 3) return { label: `${days}d ago`, color: "#E8B84B" };
+  return { label: `${days}d ago — overdue`, color: "#E0685E" };
+}
+
 export default function AdminDepositsPage() {
   const [deposits, setDeposits] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -114,7 +134,10 @@ export default function AdminDepositsPage() {
   if (searchEmail.trim()) filtered = filtered.filter((d) => d.userEmail?.toLowerCase().includes(searchEmail.trim().toLowerCase()));
   if (searchRef.trim())
     filtered = filtered.filter(
-      (d) => (d.ref || "").toLowerCase().includes(searchRef.trim().toLowerCase()) || (d.txRef || "").toLowerCase().includes(searchRef.trim().toLowerCase())
+      (d) =>
+        (d.ref || "").toLowerCase().includes(searchRef.trim().toLowerCase()) ||
+        (d.txRef || "").toLowerCase().includes(searchRef.trim().toLowerCase()) ||
+        (d.narrationCode || "").toLowerCase().includes(searchRef.trim().toLowerCase())
     );
 
   const counts = {
@@ -122,7 +145,9 @@ export default function AdminDepositsPage() {
     approved: deposits.filter((d) => d.status === "approved").length,
     rejected: deposits.filter((d) => d.status === "rejected").length,
   };
-  const pendingWithdrawals = deposits.filter((d) => d.lastWithdrawalRequest?.status === "pending");
+  const pendingWithdrawals = deposits
+    .filter((d) => d.lastWithdrawalRequest?.status === "pending")
+    .sort((a, b) => a.lastWithdrawalRequest.requestedAt - b.lastWithdrawalRequest.requestedAt);
 
   if (loading) return <div style={{ textAlign: "center", padding: 60, color: C.dim }}>Loading deposits…</div>;
 
@@ -155,24 +180,42 @@ export default function AdminDepositsPage() {
             Pending Withdrawal Requests
           </h3>
           <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 24 }}>
-            {pendingWithdrawals.map((d) => (
-              <div key={d.id} style={{ ...cardStyle, border: "1px solid rgba(123,158,217,0.3)", padding: 14 }}>
-                <div style={{ fontSize: 13, marginBottom: 8 }}>
-                  <strong style={{ color: "#F3E9DD" }}>{d.userName}</strong> — ₦{d.lastWithdrawalRequest.amount.toLocaleString()}
+            {pendingWithdrawals.map((d) => {
+              const age = withdrawalAge(d.lastWithdrawalRequest.requestedAt);
+              return (
+                <div key={d.id} style={{ ...cardStyle, border: "1px solid rgba(123,158,217,0.3)", padding: 14 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
+                    <div style={{ fontSize: 13 }}>
+                      <strong style={{ color: "#F9F1E7" }}>{d.userName}</strong> — ₦{d.lastWithdrawalRequest.amount.toLocaleString()}
+                    </div>
+                    <span
+                      style={{
+                        fontSize: 10.5,
+                        fontWeight: 700,
+                        color: age.color,
+                        background: `${age.color}1c`,
+                        padding: "3px 9px",
+                        borderRadius: 20,
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {age.label}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: 12, color: C.muted, marginBottom: 10 }}>
+                    {d.lastWithdrawalRequest.bank} · {d.lastWithdrawalRequest.accNo} · {d.lastWithdrawalRequest.accName}
+                  </div>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button style={{ ...buttonStyle("gold"), flex: 1, fontSize: 12, padding: "8px" }} onClick={() => handleMarkPaid(d)} disabled={busyId === d.id}>
+                      Mark Paid
+                    </button>
+                    <button style={{ ...buttonStyle("danger"), flex: 1, fontSize: 12, padding: "8px" }} onClick={() => handleRejectWithdrawal(d)} disabled={busyId === d.id}>
+                      Reject
+                    </button>
+                  </div>
                 </div>
-                <div style={{ fontSize: 12, color: C.muted, marginBottom: 10 }}>
-                  {d.lastWithdrawalRequest.bank} · {d.lastWithdrawalRequest.accNo} · {d.lastWithdrawalRequest.accName}
-                </div>
-                <div style={{ display: "flex", gap: 8 }}>
-                  <button style={{ ...buttonStyle("gold"), flex: 1, fontSize: 12, padding: "8px" }} onClick={() => handleMarkPaid(d)} disabled={busyId === d.id}>
-                    Mark Paid
-                  </button>
-                  <button style={{ ...buttonStyle("danger"), flex: 1, fontSize: 12, padding: "8px" }} onClick={() => handleRejectWithdrawal(d)} disabled={busyId === d.id}>
-                    Reject
-                  </button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </>
       )}
@@ -180,7 +223,7 @@ export default function AdminDepositsPage() {
       <div className="admin-search-grid" style={{ marginBottom: 20 }}>
         <FormInput placeholder="Search by Name" value={searchName} onChange={(e) => setSearchName(e.target.value)} />
         <FormInput placeholder="Search by Email" value={searchEmail} onChange={(e) => setSearchEmail(e.target.value)} />
-        <FormInput placeholder="Search by Reference" value={searchRef} onChange={(e) => setSearchRef(e.target.value)} />
+        <FormInput placeholder="Search by Reference or Narration Code" value={searchRef} onChange={(e) => setSearchRef(e.target.value)} />
       </div>
 
       <div style={{ display: "flex", gap: 6, marginBottom: 20, flexWrap: "wrap" }}>
@@ -204,7 +247,7 @@ export default function AdminDepositsPage() {
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 12 }}>
                   <div>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6, flexWrap: "wrap" }}>
-                      <span style={{ fontSize: 15, color: "#F3E9DD", fontWeight: 500 }}>{dep.userName}</span>
+                      <span style={{ fontSize: 15, color: "#F9F1E7", fontWeight: 500 }}>{dep.userName}</span>
                       <span style={chipStyle(sc)}>{dep.status.toUpperCase()}</span>
                     </div>
                     <div style={{ fontSize: 12, color: C.muted }}>{dep.userEmail}</div>
@@ -224,12 +267,19 @@ export default function AdminDepositsPage() {
                   </div>
                   <div style={{ fontSize: 12, marginTop: 4 }}>
                     <span style={{ color: C.dim }}>Sender: </span>
-                    <span style={{ color: "#F3E9DD" }}>{dep.senderName}</span>
+                    <span style={{ color: "#F9F1E7" }}>{dep.senderName}</span>
                   </div>
+                  {dep.narrationCode && (
+                    <div style={{ fontSize: 12, marginTop: 4 }}>
+                      <span style={{ color: C.dim }}>Narration Code: </span>
+                      <span style={{ color: C.crimson, fontWeight: 800, letterSpacing: "0.05em" }}>{dep.narrationCode}</span>
+                      <span style={{ color: C.dim }}> — search this in your bank statement</span>
+                    </div>
+                  )}
                   {dep.amountPaid != null && (
                     <div style={{ fontSize: 12, marginTop: 4 }}>
                       <span style={{ color: C.dim }}>Amount Paid (reported): </span>
-                      <span style={{ color: dep.amountPaid === dep.amount ? "#F3E9DD" : C.red, fontWeight: dep.amountPaid === dep.amount ? 400 : 700 }}>
+                      <span style={{ color: dep.amountPaid === dep.amount ? "#F9F1E7" : C.red, fontWeight: dep.amountPaid === dep.amount ? 400 : 700 }}>
                         ₦{dep.amountPaid.toLocaleString()}
                       </span>
                       {dep.amountPaid !== dep.amount && (

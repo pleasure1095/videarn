@@ -56,14 +56,25 @@ export async function getAllDeposits() {
  * should be enough to submit a deposit even if the screenshot upload
  * itself couldn't complete. The caller (submitDeposit) still requires at
  * least one proof method before allowing submission at all.
+ *
+ * Race against an 8-second timeout so a slow/stalled network call can
+ * never leave the Submit button hung indefinitely — uploadBytes() has no
+ * built-in timeout, so without this a bad connection means the person is
+ * stuck staring at "Submitting…" with no way forward. On timeout the
+ * deposit still submits (see submitDeposit), just without the screenshot
+ * attached — the transaction reference/description text still goes
+ * through either way.
  */
 async function uploadScreenshot(userId, file) {
   if (!file) return null;
   try {
     const path = `deposit-screenshots/${userId}/${Date.now()}-${file.name}`;
     const storageRef = ref(storage, path);
-    await uploadBytes(storageRef, file);
-    return getDownloadURL(storageRef);
+    const uploadPromise = uploadBytes(storageRef, file).then(() => getDownloadURL(storageRef));
+    const timeoutPromise = new Promise((resolve) =>
+      setTimeout(() => resolve(null), 8000)
+    );
+    return await Promise.race([uploadPromise, timeoutPromise]);
   } catch (err) {
     console.error("Screenshot upload failed (continuing without it):", err);
     return null;
@@ -81,7 +92,7 @@ async function uploadScreenshot(userId, file) {
  * reference or screenshot, which are now optional extras that speed up
  * admin review but aren't required to submit.
  */
-export async function submitDeposit({ userId, userName, userEmail, planId, senderName, amountPaid, proof, txRef, screenshotFile }) {
+export async function submitDeposit({ userId, userName, userEmail, planId, senderName, amountPaid, proof, txRef, narrationCode, screenshotFile }) {
   const plan = VIPS[planId];
   if (!plan) throw new Error("Invalid VIP plan selected.");
   if (!senderName?.trim()) throw new Error("Enter the name used for the transfer.");
@@ -103,6 +114,7 @@ export async function submitDeposit({ userId, userName, userEmail, planId, sende
     amountPaid,
     proof: proof?.trim() || "",
     txRef: txRef?.trim() || "",
+    narrationCode: narrationCode || "",
     screenshotUrl,
     status: "pending",
     lifetimeWithdrawn: 0,

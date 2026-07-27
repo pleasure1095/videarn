@@ -29,8 +29,7 @@ const DEFAULT_STATUS = {
   longestStreak: 0,
   totalCheckIns: 0,
   lastCheckInDate: null,
-  pendingReward: 0, // accumulating toward the 7-day unlock, lost if streak breaks early
-  unlockedBalance: 0, // withdrawable once a 7-day streak completes
+  unlockedBalance: 0, // withdrawable — credited instantly per check-in, same as Referral/Welcome bonuses
   lifetimeWithdrawn: 0,
 };
 
@@ -51,18 +50,18 @@ export async function getCheckInStatus(userId) {
 }
 
 /**
- * Records today's check-in, updates the streak, and applies the reward
- * rules:
- *  - ₦100/day accrues into `pendingReward` for each of the first 7
- *    consecutive days. No reward accrues past day 7 within a single
- *    streak — a completed 7-day streak's reward is already fully
- *    accounted for in unlockedBalance by that point.
- *  - Reaching exactly 7 consecutive days moves the full ₦700 from
- *    pendingReward into unlockedBalance (withdrawable) and resets the
- *    streak counter to 0, so a new 7-day cycle can begin.
- *  - Breaking the streak before day 7 forfeits pendingReward entirely —
- *    it resets to 0 along with the streak. Already-unlocked balance from
- *    a previous completed cycle is never affected.
+ * Records today's check-in and credits ₦100 straight to the withdrawable
+ * balance immediately — no 7-day lock/hold.
+ *
+ * Changed from an earlier design where ₦100/day accrued into a locked
+ * `pendingReward` that only unlocked as one ₦700 lump sum after 7
+ * CONSECUTIVE days (forfeiting everything if a day was missed before
+ * day 7). Per the site owner's explicit request, Check-In now behaves
+ * like Referral Bonus and Welcome Bonus — both of which already credit
+ * straight to a withdrawable balance the instant they're earned, with no
+ * waiting period. The streak counter is kept for display/engagement
+ * purposes only (so the app can still show "5 day streak!") — it no
+ * longer gates or forfeits any money.
  */
 export async function performCheckIn(userId) {
   const status = await getCheckInStatus(userId);
@@ -70,44 +69,20 @@ export async function performCheckIn(userId) {
 
   const today = status.today;
   const continuingStreak = status.lastCheckInDate && daysBetweenDateStrings(status.lastCheckInDate, today) === 1;
-
-  let newStreak = continuingStreak ? status.currentStreak + 1 : 1;
-  let newPendingReward = continuingStreak ? status.pendingReward : 0;
-  let newUnlockedBalance = status.unlockedBalance;
-  let justUnlocked = false;
-
-  if (newStreak <= CHECKIN_STREAK_TARGET) {
-    newPendingReward += CHECKIN_DAILY_REWARD;
-  }
-
-  if (newStreak === CHECKIN_STREAK_TARGET) {
-    // 7-day streak completed — unlock the accumulated reward and start a
-    // fresh cycle.
-    newUnlockedBalance += newPendingReward;
-    newPendingReward = 0;
-    newStreak = 0;
-    justUnlocked = true;
-  }
+  const newStreak = continuingStreak ? status.currentStreak + 1 : 1;
 
   const updated = {
     currentStreak: newStreak,
-    longestStreak: Math.max(continuingStreak ? status.currentStreak + 1 : 1, status.longestStreak || 0),
+    longestStreak: Math.max(newStreak, status.longestStreak || 0),
     totalCheckIns: (status.totalCheckIns || 0) + 1,
     lastCheckInDate: today,
-    pendingReward: newPendingReward,
-    unlockedBalance: newUnlockedBalance,
+    unlockedBalance: (status.unlockedBalance || 0) + CHECKIN_DAILY_REWARD,
     lifetimeWithdrawn: status.lifetimeWithdrawn || 0,
   };
 
   await setDoc(doc(db, CHECKINS_COLLECTION, userId), updated);
 
-  if (justUnlocked) {
-    await createNotification(
-      userId,
-      "checkin",
-      `🎉 7-day check-in streak complete! ₦${CHECKIN_MAX_REWARD.toLocaleString()} is now available to withdraw.`
-    );
-  }
+  await createNotification(userId, "checkin", `✅ Checked in! ₦${CHECKIN_DAILY_REWARD.toLocaleString()} added to your withdrawable balance.`);
 
   return { ...updated, checkedInToday: true, today };
 }

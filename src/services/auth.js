@@ -138,6 +138,30 @@ export async function updateUserProfile(uid, { name, phone }) {
 }
 
 /**
+ * Saves the user's bank details to their profile so future withdrawals
+ * can auto-fill instead of re-typing bank/account number/account name
+ * every single time. Stored as a single nested object (savedBankDetails)
+ * rather than three separate top-level fields — keeps it self-contained
+ * and easy to check for existence (`if (user.savedBankDetails)`) without
+ * needing to check three fields individually.
+ *
+ * This is a genuinely separate concern from updateUserProfile (name/
+ * phone) — kept as its own function so Settings' "Save Bank Details"
+ * action doesn't need to also resend name/phone just to update one
+ * nested object, and vice versa.
+ */
+export async function saveBankDetails(uid, { bank, accNo, accName }) {
+  await updateDoc(doc(db, USERS_COLLECTION, uid), {
+    savedBankDetails: {
+      bank,
+      accNo,
+      accName,
+      updatedAt: Date.now(),
+    },
+  });
+}
+
+/**
  * Re-authenticates the current user with their existing password.
  * Required before Firebase will allow a password change if the user's
  * session isn't "recent" (Firebase's own security requirement, not ours).

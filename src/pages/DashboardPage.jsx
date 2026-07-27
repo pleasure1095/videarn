@@ -386,7 +386,7 @@ export default function DashboardPage() {
                     ₦{inv.plan.daily.toLocaleString()} daily earnings
                   </div>
                   <div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>
-                    Invested ₦{inv.amount.toLocaleString()} (locked) · Approved {fmtDate(inv.approvedAt)}
+                    Invested ₦{(inv.amount || 0).toLocaleString()} (locked) · Approved {fmtDate(inv.approvedAt)}
                   </div>
                   {inv.stillInGracePeriod && (
                     <div style={{ fontSize: 11, color: C.dim, marginTop: 4 }}>
@@ -447,7 +447,7 @@ export default function DashboardPage() {
                     </div>
                     <div style={{ fontSize: 11, color: C.muted }}>{fmtDate(d.submittedAt)}</div>
                   </div>
-                  <div style={{ fontSize: 18, fontWeight: 800, color: sc }}>₦{d.amount.toLocaleString()}</div>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: sc }}>₦{(d.amount || 0).toLocaleString()}</div>
                 </div>
               );
             })}

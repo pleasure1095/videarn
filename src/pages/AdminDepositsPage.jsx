@@ -186,7 +186,7 @@ export default function AdminDepositsPage() {
                 <div key={d.id} style={{ ...cardStyle, border: "1px solid rgba(123,158,217,0.3)", padding: 14 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
                     <div style={{ fontSize: 13 }}>
-                      <strong style={{ color: "#F9F1E7" }}>{d.userName}</strong> — ₦{d.lastWithdrawalRequest.amount.toLocaleString()}
+                      <strong style={{ color: "#F9F1E7" }}>{d.userName}</strong> — ₦{(d.lastWithdrawalRequest.amount || 0).toLocaleString()}
                     </div>
                     <span
                       style={{
@@ -254,8 +254,8 @@ export default function AdminDepositsPage() {
                     <div style={{ fontSize: 11, color: C.dim, marginTop: 2 }}>Submitted: {fmtDate(dep.submittedAt)}</div>
                   </div>
                   <div style={{ textAlign: "right" }}>
-                    <div style={{ fontSize: 22, fontWeight: 800, color: C.green }}>₦{dep.amount.toLocaleString()}</div>
-                    <div style={{ fontSize: 11, color: C.muted }}>{dep.planLabel} · ₦{dep.planDaily.toLocaleString()}/day</div>
+                    <div style={{ fontSize: 22, fontWeight: 800, color: C.green }}>₦{(dep.amount || 0).toLocaleString()}</div>
+                    <div style={{ fontSize: 11, color: C.muted }}>{dep.planLabel} · ₦{(dep.planDaily || 0).toLocaleString()}/day</div>
                   </div>
                 </div>
 
@@ -280,10 +280,10 @@ export default function AdminDepositsPage() {
                     <div style={{ fontSize: 12, marginTop: 4 }}>
                       <span style={{ color: C.dim }}>Amount Paid (reported): </span>
                       <span style={{ color: dep.amountPaid === dep.amount ? "#F9F1E7" : C.red, fontWeight: dep.amountPaid === dep.amount ? 400 : 700 }}>
-                        ₦{dep.amountPaid.toLocaleString()}
+                        ₦{(dep.amountPaid || 0).toLocaleString()}
                       </span>
                       {dep.amountPaid !== dep.amount && (
-                        <span style={{ color: C.red }}> ⚠ expected ₦{dep.amount.toLocaleString()}</span>
+                        <span style={{ color: C.red }}> ⚠ expected ₦{(dep.amount || 0).toLocaleString()}</span>
                       )}
                     </div>
                   )}

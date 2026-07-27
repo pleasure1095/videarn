@@ -19,7 +19,7 @@ export default function CopyRow({ label, value, accent, big }) {
           style={{
             fontSize: big ? 17 : 13,
             fontWeight: big ? 700 : 400,
-            color: accent || "#F3E9DD",
+            color: accent || "#F9F1E7",
             letterSpacing: big ? "0.06em" : 0,
           }}
         >

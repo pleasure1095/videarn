@@ -1,36 +1,43 @@
 import { useEffect, useState } from "react";
 import { C, buttonStyle } from "../styles/theme";
 import { WHATSAPP_GROUP_LINK } from "../utils/paymentInfo";
+import { VIP_LIST } from "../utils/vipPlans";
 import Logo from "./Logo";
 
-const SEEN_KEY = "gadjiz_welcome_seen";
-
 /**
- * One-time welcome modal shown after a user's first successful login in
- * this browser. Purely a polish/atmosphere touch — no bonus, credit, or
- * financial logic attached. Uses localStorage only to remember "have they
- * dismissed this before" (a UI preference), not application data, which is
- * consistent with the project's move away from localStorage for real data.
+ * Welcome modal shown once per SESSION (every fresh login), not just once
+ * ever per browser. Uses sessionStorage instead of localStorage — a
+ * sessionStorage entry clears automatically when the browser tab/window
+ * is closed, so signing back in later (a new session) shows it again,
+ * while rapid tab switches or page refreshes within the same session
+ * don't re-trigger it on every render.
+ *
+ * The seen-flag is keyed by userId so it's scoped per account, not just
+ * per device — important on a shared/public device where a second person
+ * logging in shouldn't inherit the first person's dismissal.
  */
-export default function WelcomeModal({ userName }) {
+export default function WelcomeModal({ userId, userName }) {
   const [visible, setVisible] = useState(false);
+  const seenKey = `gadjiz_welcome_seen_${userId}`;
 
   useEffect(() => {
+    if (!userId) return;
     try {
-      if (!localStorage.getItem(SEEN_KEY)) {
+      if (!sessionStorage.getItem(seenKey)) {
         setVisible(true);
       }
     } catch {
-      // localStorage unavailable (private browsing, etc.) — just skip
+      // sessionStorage unavailable (private browsing, etc.) — just skip
       // the modal rather than throwing.
     }
-  }, []);
+  }, [userId, seenKey]);
 
   function dismiss() {
     try {
-      localStorage.setItem(SEEN_KEY, "1");
+      sessionStorage.setItem(seenKey, "1");
     } catch {
-      // Non-fatal if this fails — worst case the modal reappears next visit.
+      // Non-fatal if this fails — worst case the modal reappears on the
+      // next render within this same session.
     }
     setVisible(false);
   }
@@ -55,12 +62,12 @@ export default function WelcomeModal({ userName }) {
       <div
         className="fade"
         style={{
-          background: "#100C0D",
+          background: "#1D1719",
           border: `1px solid ${C.crimson}30`,
           borderRadius: 20,
           padding: 32,
           width: "100%",
-          maxWidth: 380,
+          maxWidth: 420,
           textAlign: "center",
           boxShadow: "0 40px 80px rgba(0,0,0,0.6)",
         }}
@@ -71,10 +78,43 @@ export default function WelcomeModal({ userName }) {
         <h2 style={{ fontSize: 20, color: C.crimson, marginBottom: 8, fontWeight: 800 }}>
           Welcome, {userName?.split(" ")[0] || "there"}
         </h2>
-        <p style={{ fontSize: 13, color: C.muted, marginBottom: 20, lineHeight: 1.6 }}>
+        <p style={{ fontSize: 13, color: C.muted, marginBottom: 16, lineHeight: 1.6 }}>
           Your account is ready. Explore VIP plans, track your earnings, and
           grow your portfolio — all in one place.
         </p>
+
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: 6,
+            marginBottom: 18,
+            maxHeight: 200,
+            overflowY: "auto",
+            paddingRight: 2,
+          }}
+        >
+          {VIP_LIST.map((plan) => (
+            <div
+              key={plan.id}
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                padding: "8px 12px",
+                background: "rgba(255,255,255,0.03)",
+                border: `1px solid ${plan.color}28`,
+                borderRadius: 10,
+              }}
+            >
+              <span style={{ fontSize: 12, fontWeight: 700, color: "#F9F1E7" }}>{plan.label}</span>
+              <span style={{ fontSize: 11, color: C.muted, textAlign: "right" }}>
+                ₦{plan.amount.toLocaleString()} → <strong style={{ color: plan.color }}>₦{plan.daily.toLocaleString()}/day</strong>
+              </span>
+            </div>
+          ))}
+        </div>
+
         <a
           href={WHATSAPP_GROUP_LINK}
           target="_blank"

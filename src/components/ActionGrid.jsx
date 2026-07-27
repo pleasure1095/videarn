@@ -43,7 +43,7 @@ export default function ActionGrid({ onDeposit, onMigrate, onWithdraw, onSupport
           }}
         >
           <span style={{ fontSize: 20 }}>{a.icon}</span>
-          <span style={{ fontSize: 10.5, fontWeight: 700, color: "#F3E9DD" }}>{a.label}</span>
+          <span style={{ fontSize: 10.5, fontWeight: 700, color: "#F9F1E7" }}>{a.label}</span>
         </button>
       ))}
     </div>

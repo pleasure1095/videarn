@@ -62,7 +62,7 @@ export default function DailyReviewsWidget({ userId, isVipMember }) {
   return (
     <div
       style={{
-        background: "linear-gradient(135deg, rgba(184,40,61,0.16), rgba(16,12,13,0.5))",
+        background: "linear-gradient(135deg, rgba(196,56,82,0.2), rgba(29,23,25,0.5))",
         border: `1px solid ${C.crimson}30`,
         borderRadius: 16,
         padding: "16px 18px",
@@ -71,7 +71,7 @@ export default function DailyReviewsWidget({ userId, isVipMember }) {
     >
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
         <span style={{ fontSize: 18 }}>⭐</span>
-        <span style={{ fontSize: 15, fontWeight: 800, color: "#F3E9DD" }}>Daily Reviews</span>
+        <span style={{ fontSize: 15, fontWeight: 800, color: "#F9F1E7" }}>Daily Reviews</span>
       </div>
       <div style={{ fontSize: 12, color: C.muted, fontWeight: 600, marginBottom: 14 }}>
         {allRatedToday
@@ -79,25 +79,63 @@ export default function DailyReviewsWidget({ userId, isVipMember }) {
           : `Rate all ${totalCount} products today to unlock today's VIP earnings (${ratedCount}/${totalCount} done)`}
       </div>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
         {status.todaysProducts.map((p) => (
           <div
             key={p.id}
             style={{
               display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
+              flexDirection: "column",
               gap: 10,
-              padding: "10px 12px",
+              padding: 12,
               background: "rgba(255,255,255,0.03)",
-              borderRadius: 10,
+              borderRadius: 12,
             }}
           >
-            <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-              <span style={{ fontSize: 18 }}>{p.emoji}</span>
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 12.5, fontWeight: 700, color: "#F3E9DD" }}>{p.name}</div>
-                <div style={{ fontSize: 10, color: C.dim }}>{p.category}</div>
+            <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+              <img
+                src={p.image}
+                alt={p.name}
+                style={{
+                  width: 64,
+                  height: 64,
+                  borderRadius: 10,
+                  objectFit: "cover",
+                  flexShrink: 0,
+                  background: "rgba(255,255,255,0.05)",
+                }}
+                onError={(e) => {
+                  // Falls back to the emoji placeholder if a hotlinked
+                  // photo URL ever goes stale — keeps the card usable
+                  // instead of showing a broken image icon.
+                  e.target.style.display = "none";
+                  e.target.nextSibling.style.display = "flex";
+                }}
+              />
+              <div
+                style={{
+                  display: "none",
+                  width: 64,
+                  height: 64,
+                  borderRadius: 10,
+                  flexShrink: 0,
+                  background: "rgba(255,255,255,0.05)",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: 26,
+                }}
+              >
+                {p.emoji}
+              </div>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: "#F9F1E7" }}>{p.name}</div>
+                  <div style={{ fontSize: 13, fontWeight: 800, color: C.crimson, whiteSpace: "nowrap" }}>
+                    ₦{p.price.toLocaleString()}
+                  </div>
+                </div>
+                <div style={{ fontSize: 10, color: C.dim, marginBottom: 4 }}>{p.category}</div>
+                <div style={{ fontSize: 11, color: C.muted, lineHeight: 1.4 }}>{p.description}</div>
               </div>
             </div>
             <StarRow

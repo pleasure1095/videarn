@@ -5,17 +5,22 @@ import {
   performCheckIn,
   withdrawCheckInBalance,
   CHECKIN_DAILY_REWARD,
-  CHECKIN_STREAK_TARGET,
-  CHECKIN_MAX_REWARD,
 } from "../services/checkins";
 import { isWithinWithdrawalHours } from "../utils/paymentInfo";
 import { MIN_WITHDRAWAL } from "../utils/earnings";
 
 /**
- * Daily check-in streak widget. Gated to VIP members only (users with at
- * least one ever-approved deposit) — non-VIP users see an explanatory
- * locked state instead of the check-in button, rather than the widget
+ * Daily check-in widget. Gated to VIP members only (users with at least
+ * one ever-approved deposit) — non-VIP users see an explanatory locked
+ * state instead of the check-in button, rather than the widget
  * disappearing entirely, so the incentive to become VIP is visible.
+ *
+ * Each day's ₦100 credits straight to withdrawable balance the moment
+ * the person checks in — no lock, no waiting period, same as Referral
+ * and Welcome bonuses. The streak counter is still shown and still
+ * tracked (consecutive-day count, longest streak) for engagement/display
+ * purposes, but it no longer gates or forfeits any money — missing a day
+ * just resets the visual streak counter back to 1 on the next check-in.
  */
 export default function CheckInWidget({ userId, isVipMember }) {
   const [status, setStatus] = useState(null);
@@ -43,6 +48,7 @@ export default function CheckInWidget({ userId, isVipMember }) {
     try {
       const updated = await performCheckIn(userId);
       setStatus(updated);
+      setOk(`₦${CHECKIN_DAILY_REWARD.toLocaleString()} added to your withdrawable balance!`);
     } catch (e) {
       console.error("Check-in failed:", e);
       setErr("Could not check in. Please try again.");
@@ -109,14 +115,14 @@ export default function CheckInWidget({ userId, isVipMember }) {
         <div>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
             <span style={{ fontSize: 20 }}>🔥</span>
-            <span style={{ fontSize: 18, fontWeight: 800, color: "#F3E9DD" }}>
-              Day {status.currentStreak} of {CHECKIN_STREAK_TARGET}
+            <span style={{ fontSize: 18, fontWeight: 800, color: "#F9F1E7" }}>
+              {status.currentStreak}-day streak
             </span>
           </div>
           <div style={{ fontSize: 12, color: C.muted, fontWeight: 600 }}>
             {status.checkedInToday
-              ? `Checked in today · ₦${status.pendingReward.toLocaleString()} pending unlock`
-              : `Check in daily to earn ₦${CHECKIN_DAILY_REWARD}/day — unlocks ₦${CHECKIN_MAX_REWARD.toLocaleString()} after ${CHECKIN_STREAK_TARGET} days straight`}
+              ? "Checked in today ✓"
+              : `Check in daily to earn ₦${CHECKIN_DAILY_REWARD} — credited instantly to your withdrawable balance`}
           </div>
         </div>
         <button
@@ -149,7 +155,7 @@ export default function CheckInWidget({ userId, isVipMember }) {
             }}
           >
             <div style={{ fontSize: 13, fontWeight: 700, color: C.green }}>
-              ₦{status.unlockedBalance.toLocaleString()} unlocked
+              ₦{status.unlockedBalance.toLocaleString()} available
             </div>
             <button
               style={{ ...buttonStyle(canWithdraw ? "gold" : "ghost"), padding: "8px 16px", fontSize: 12 }}
@@ -161,8 +167,7 @@ export default function CheckInWidget({ userId, isVipMember }) {
           </div>
           {!canWithdraw && (
             <p style={{ fontSize: 11, color: C.dim, marginTop: 8, fontWeight: 600 }}>
-              Complete another {CHECKIN_STREAK_TARGET}-day streak to reach the ₦{MIN_WITHDRAWAL.toLocaleString()}{" "}
-              withdrawal minimum.
+              Keep checking in daily — you'll reach the ₦{MIN_WITHDRAWAL.toLocaleString()} withdrawal minimum soon.
             </p>
           )}
         </div>

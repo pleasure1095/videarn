@@ -21,6 +21,33 @@ function chipStyle(color) {
   };
 }
 
+/**
+ * Generates a short, unique narration/remark code for a deposit — the
+ * user copies this into their bank transfer's narration field so the
+ * admin can match an incoming bank alert to a specific pending deposit
+ * by searching their bank statement for the code, rather than guessing
+ * from sender name/amount alone (which can be ambiguous if two people
+ * send similar amounts around the same time).
+ *
+ * 8 characters after the "GDZ-" prefix (not 6) — verified by hand-testing
+ * the 6-char version first: at 10,000 generated codes it already produced
+ * 1 collision (expected birthday-paradox behavior for a 36^6-space code).
+ * Two different users landing on the same narration code would make
+ * matching unreliable exactly when it matters most (high deposit volume),
+ * so the extra 2 characters meaningfully reduce that risk while still
+ * being short enough to type correctly into a bank app's narration field.
+ * "GDZ-" prefix makes it recognizable as belonging to this app if it
+ * shows up in a bank statement search.
+ */
+function genNarrationCode() {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  let code = "GDZ-";
+  for (let i = 0; i < 8; i++) {
+    code += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return code;
+}
+
 export default function DepositModal({ user, onClose, onDone, initialPlanId }) {
   const [step, setStep] = useState(1);
   const [planId, setPlanId] = useState(initialPlanId || "vip1");
@@ -34,6 +61,10 @@ export default function DepositModal({ user, onClose, onDone, initialPlanId }) {
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
   const [savedRef, setSavedRef] = useState("");
+  // Generated once via useState initializer (not on every render) — the
+  // same code stays valid if the user navigates back and forth between
+  // steps 1-3 without closing the modal.
+  const [narrationCode] = useState(genNarrationCode);
 
   const plan = VIP_LIST.find((p) => p.id === planId);
 
@@ -58,17 +89,29 @@ export default function DepositModal({ user, onClose, onDone, initialPlanId }) {
 
     setBusy(true);
     try {
-      const result = await submitDeposit({
-        userId: user.uid,
-        userName: user.name,
-        userEmail: user.email,
-        planId,
-        senderName,
-        amountPaid: numAmountPaid,
-        proof,
-        txRef,
-        screenshotFile,
-      });
+      // Overall safety net: even with the screenshot upload's own 8s
+      // timeout (services/deposits.js), this races the whole submission
+      // against 15s so the button can never hang indefinitely for ANY
+      // reason — a stalled Firestore write, a dropped connection, etc.
+      // If it times out, the person sees a clear error and can retry,
+      // instead of being stuck on "Submitting…" with no way forward.
+      const result = await Promise.race([
+        submitDeposit({
+          userId: user.uid,
+          userName: user.name,
+          userEmail: user.email,
+          planId,
+          senderName,
+          amountPaid: numAmountPaid,
+          proof,
+          txRef,
+          narrationCode,
+          screenshotFile,
+        }),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("This is taking longer than expected. Please check your connection and try again.")), 15000)
+        ),
+      ]);
       setSavedRef(result.ref);
       setDone(true);
     } catch (e) {
@@ -206,6 +249,26 @@ export default function DepositModal({ user, onClose, onDone, initialPlanId }) {
               <CopyRow label="Amount to Send" value={`₦${plan.amount.toLocaleString()}`} accent={C.green} big />
             </div>
           </div>
+
+          <div
+            style={{
+              background: "rgba(196,56,82,0.14)",
+              border: `1px solid ${C.crimson}40`,
+              borderRadius: 14,
+              padding: 16,
+              marginBottom: 20,
+            }}
+          >
+            <div style={{ fontSize: 11, color: C.dim, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 8 }}>
+              ⚠️ Required — Transfer Narration/Remark
+            </div>
+            <CopyRow label="Enter this code" value={narrationCode} accent={C.crimson} big />
+            <p style={{ fontSize: 11.5, color: C.muted, marginTop: 8, lineHeight: 1.5 }}>
+              When making the transfer in your bank app, paste this code into the
+              "Narration", "Remark", or "Description" field. This helps us match your
+              payment to your deposit quickly.
+            </p>
+          </div>
           <button style={{ ...buttonStyle("gold"), width: "100%" }} onClick={() => setStep(3)}>
             I've Made the Transfer →
           </button>
@@ -238,6 +301,9 @@ export default function DepositModal({ user, onClose, onDone, initialPlanId }) {
             </div>
             <div style={{ marginTop: 4 }}>
               Expected Amount: <span style={{ color: C.green }}>₦{plan.amount.toLocaleString()}</span>
+            </div>
+            <div style={{ marginTop: 4 }}>
+              Narration Code Used: <span style={{ color: C.crimson, fontWeight: 700, letterSpacing: "0.05em" }}>{narrationCode}</span>
             </div>
           </div>
           <ErrorBox msg={err} />

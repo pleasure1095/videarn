@@ -7,11 +7,15 @@ import FormInput from "./FormInput";
 import { ErrorBox, SuccessBox } from "./MessageBox";
 import Overlay from "./Overlay";
 
-export default function WithdrawModal({ investment, userId, onClose, onDone }) {
+export default function WithdrawModal({ investment, userId, savedBankDetails, onClose, onDone }) {
   const [amount, setAmount] = useState(String(investment.withdrawableBalance));
-  const [bank, setBank] = useState("");
-  const [accNo, setAccNo] = useState("");
-  const [accName, setAccName] = useState("");
+  // Auto-filled from the user's saved bank details (set in Settings) if
+  // present, but still fully editable here — someone can withdraw to a
+  // different account on a one-off basis without overwriting their saved
+  // default.
+  const [bank, setBank] = useState(savedBankDetails?.bank || "");
+  const [accNo, setAccNo] = useState(savedBankDetails?.accNo || "");
+  const [accName, setAccName] = useState(savedBankDetails?.accName || "");
   const [err, setErr] = useState("");
   const [ok, setOk] = useState("");
   const [busy, setBusy] = useState(false);
@@ -112,7 +116,7 @@ export default function WithdrawModal({ investment, userId, onClose, onDone }) {
         </div>
         <div style={{ display: "flex", justifyContent: "space-between" }}>
           <span style={{ color: C.dim }}>Minimum Withdrawal</span>
-          <span style={{ color: "#F3E9DD" }}>₦{MIN_WITHDRAWAL.toLocaleString()}</span>
+          <span style={{ color: "#F9F1E7" }}>₦{MIN_WITHDRAWAL.toLocaleString()}</span>
         </div>
       </div>
 
@@ -130,6 +134,11 @@ export default function WithdrawModal({ investment, userId, onClose, onDone }) {
       </div>
       <div style={{ marginBottom: 14 }}>
         <label style={labelStyle}>Bank Name</label>
+        {savedBankDetails && (
+          <p style={{ fontSize: 10.5, color: C.dim, marginTop: -8, marginBottom: 8 }}>
+            Auto-filled from your saved bank details — edit here if withdrawing to a different account, or update your default in Settings.
+          </p>
+        )}
         <select
           value={bank}
           onChange={(e) => setBank(e.target.value)}
@@ -139,7 +148,7 @@ export default function WithdrawModal({ investment, userId, onClose, onDone }) {
             background: "#111A14",
             border: "1px solid rgba(255,255,255,0.1)",
             borderRadius: 8,
-            color: "#F3E9DD",
+            color: "#F9F1E7",
             fontSize: 14,
           }}
         >

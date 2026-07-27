@@ -6,6 +6,7 @@ import { calculateInvestmentEarnings, getDaysEarning } from "../utils/earnings";
 import { isWithinWithdrawalHours, WHATSAPP_GROUP_LINK } from "../utils/paymentInfo";
 import { getUserDeposits } from "../services/deposits";
 import { getReviewStatus, countReviewedEarningDays } from "../services/reviews";
+import { getCheckInStatus } from "../services/checkins";
 import PlanCarousel from "../components/PlanCarousel";
 import EarnersTicker from "../components/EarnersTicker";
 import CheckInWidget from "../components/CheckInWidget";
@@ -45,6 +46,7 @@ export default function DashboardPage() {
   const [deposits, setDeposits] = useState([]);
   const [activityEvents, setActivityEvents] = useState([]);
   const [completedReviewDays, setCompletedReviewDays] = useState([]);
+  const [checkInBalance, setCheckInBalance] = useState(0);
   const [loading, setLoading] = useState(true);
   const [showDeposit, setShowDeposit] = useState(false);
   const [preselectedPlanId, setPreselectedPlanId] = useState(null);
@@ -62,6 +64,13 @@ export default function DashboardPage() {
       setActivityEvents(events);
       const reviewStatus = await getReviewStatus(user.uid);
       setCompletedReviewDays(reviewStatus.completedDays);
+      // Check-in balance lives in its own Firestore collection, separate
+      // from VIP investments/bonuses — without fetching it here, the
+      // Dashboard's top-level "Withdrawable Profit" stat card would stay
+      // blind to check-in earnings entirely (CheckInWidget shows its own
+      // balance correctly, but the summary cards never knew about it).
+      const checkInStatus = await getCheckInStatus(user.uid);
+      setCheckInBalance(checkInStatus.unlockedBalance || 0);
       // Also refresh the user profile — referralBonusTotal can change from
       // an admin approving someone else's deposit (this user acting as the
       // referrer), which this session wouldn't otherwise see until re-login.
@@ -233,11 +242,11 @@ export default function DashboardPage() {
         const allStats = [
           { key: "totalInvestment", label: "Total Investment", value: `₦${fmt(totalInvested)}`, color: C.emerald },
           { key: "dailyEarnings", label: "Daily Earnings", value: `₦${fmt(totalDaily)}`, color: C.green },
-          { key: "totalEarnings", label: "Total Earnings", value: `₦${fmt(totalAvailableEarnings)}`, color: C.lime },
+          { key: "totalEarnings", label: "Total Earnings", value: `₦${fmt(totalAvailableEarnings + checkInBalance)}`, color: C.lime },
           { key: "missed", label: "Missed (Unreviewed)", value: `₦${fmt(totalMissedEarnings)}`, color: C.dim },
           { key: "referralBonus", label: "Referral Bonus", value: `₦${fmt(referralBonus)}`, color: C.forest },
           { key: "welcomeBonus", label: "Welcome Bonus", value: `₦${fmt(welcomeBonus)}`, color: "#D4506A" },
-          { key: "withdrawable", label: "Withdrawable Profit", value: `₦${fmt(totalWithdrawableProfit + referralBonus + welcomeBonus)}`, color: C.emerald },
+          { key: "withdrawable", label: "Withdrawable Profit", value: `₦${fmt(totalWithdrawableProfit + referralBonus + welcomeBonus + checkInBalance)}`, color: C.emerald },
           { key: "activePlans", label: "Active VIP Plans", value: investments.length, color: C.green },
         ];
         const majorKeys = new Set(["totalEarnings", "withdrawable", "welcomeBonus", "referralBonus"]);

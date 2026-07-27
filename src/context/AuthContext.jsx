@@ -8,6 +8,7 @@ import {
   logoutUser,
   updateUserProfile,
   changePassword,
+  saveBankDetails,
 } from "../services/auth";
 
 const AuthContext = createContext(null);
@@ -65,6 +66,15 @@ export function AuthProvider({ children }) {
     setUser((prev) => ({ ...prev, name: name.trim(), phone: phone.trim() }));
   }
 
+  async function updateSavedBankDetails({ bank, accNo, accName }) {
+    if (!user) throw new Error("Not signed in.");
+    await saveBankDetails(user.uid, { bank, accNo, accName });
+    // Optimistic local update, same pattern as updateProfile above — so
+    // WithdrawModal can immediately auto-fill from this without needing
+    // a full profile refetch right after saving.
+    setUser((prev) => ({ ...prev, savedBankDetails: { bank, accNo, accName, updatedAt: Date.now() } }));
+  }
+
   async function updatePassword(newPassword) {
     await changePassword(newPassword);
   }
@@ -77,6 +87,7 @@ export function AuthProvider({ children }) {
     register,
     logout,
     updateProfile,
+    updateSavedBankDetails,
     updatePassword,
     // Exposed so components can refresh the profile after external writes
     // (e.g. after an admin approves a deposit and credits a referral bonus).

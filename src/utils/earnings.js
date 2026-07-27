@@ -34,13 +34,30 @@ export function getEarningsStartTime(approvedAt) {
 }
 
 /**
- * Whole days of earnings accrued since the 24h grace period ended.
- * Returns 0 if still within the grace period (no earnings yet).
+ * Whole days of earnings accrued since approval, counting the day that
+ * completes AT the 24h grace-period mark as day 1 (not day 0).
+ *
+ * FIXED this session: the previous version returned 0 until a full
+ * additional 24h had passed AFTER the grace period ended — meaning a
+ * user's first day's earning didn't actually appear until ~48h after
+ * approval, contradicting the app's own stated promise ("earnings begin
+ * 24 hours after admin approval") shown in VIP Plans copy and elsewhere.
+ * Confirmed with the site owner: the first day's earning should be
+ * visible right at the 24h mark, not 48h.
+ *
+ * The fix: once `now` has reached the grace-period end time, day 1 has
+ * already completed — so we count elapsed time from the ORIGINAL
+ * approval timestamp (not from the grace-period end) and add 1 once the
+ * grace period has passed, rather than starting the elapsed-day count
+ * from zero at the grace-period boundary.
  */
 export function getDaysEarning(approvedAt, now = Date.now()) {
   const start = getEarningsStartTime(approvedAt);
   if (now < start) return 0;
-  return Math.floor((now - start) / (24 * 60 * 60 * 1000));
+  // At the exact 24h mark (now === start), one full day (the grace
+  // period itself) has elapsed since approval — that counts as day 1.
+  // Each additional 24h beyond that adds one more day.
+  return Math.floor((now - approvedAt) / (24 * 60 * 60 * 1000));
 }
 
 /**

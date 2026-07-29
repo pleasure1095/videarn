@@ -30,18 +30,28 @@ service cloud.firestore {
       allow create: if isOwner(uid) && request.resource.data.role == "user";
 
       // A user may update their own profile, but never change their own
-      // role, referralCode, referrerCode, referralBonusTotal, or
-      // firstVipRewarded — those fields are only ever written by trusted
-      // flows (admin deposit approval, or directly by an admin via the
-      // Manage Users screen).
-      // An admin may update ANY field on ANY user's document (role changes,
-      // referral bonus credits from deposit approval, etc.)
+      // role, referralCode, referrerCode, or firstVipRewarded — those
+      // fields are only ever written by trusted flows (admin deposit
+      // approval, or directly by an admin via the Manage Users screen).
+      //
+      // referralBonusTotal and welcomeBonus are a special case: a user IS
+      // allowed to DECREASE these (withdrawing their own bonus balance via
+      // BonusWithdrawModal / services/adminUsers.js withdrawBonusBalance),
+      // but never INCREASE them — increases only ever come from trusted
+      // flows (referral crediting on deposit approval, or the one-time
+      // welcome bonus set at account creation). This lets self-service
+      // bonus withdrawal work without opening a path for a user to
+      // fabricate free money by editing their own document upward.
+      //
+      // An admin may update ANY field on ANY user's document (role
+      // changes, referral bonus credits from deposit approval, etc.)
       allow update: if (isOwner(uid) &&
         request.resource.data.role == resource.data.role &&
         request.resource.data.referralCode == resource.data.referralCode &&
         request.resource.data.referrerCode == resource.data.referrerCode &&
-        request.resource.data.referralBonusTotal == resource.data.referralBonusTotal &&
-        request.resource.data.firstVipRewarded == resource.data.firstVipRewarded)
+        request.resource.data.firstVipRewarded == resource.data.firstVipRewarded &&
+        request.resource.data.get("referralBonusTotal", 0) <= resource.data.get("referralBonusTotal", 0) &&
+        request.resource.data.get("welcomeBonus", 0) <= resource.data.get("welcomeBonus", 0))
         || isAdmin();
 
       allow delete: if isAdmin();
@@ -100,6 +110,87 @@ service cloud.firestore {
       // user — allow any signed-in user to create one, since there's no
       // Cloud Function to originate these server-side instead.
       allow create: if isSignedIn();
+
+      allow delete: if isAdmin();
+    }
+
+    match /checkins/{userId} {
+      // Document ID IS the user's uid, so ownership is a direct path
+      // comparison rather than needing a userId field check.
+      //
+      // NOTE: this collection now holds real money (a ₦700 reward
+      // unlockable after a 7-day streak). Like the deposits withdrawal
+      // path elsewhere in this file, there's no Cloud Function here to
+      // independently verify the streak math server-side — a technically
+      // sophisticated user could edit their own document's unlockedBalance
+      // directly via dev tools. Closing that gap fully would require
+      // moving the streak/reward calculation into a Cloud Function. Noted
+      // as a known limitation of the current backend-function-free
+      // architecture, consistent with the same tradeoff already accepted
+      // for VIP withdrawals.
+      allow read, write: if isOwner(userId);
+    }
+
+    match /reviews/{userId} {
+      // Document ID IS the user's uid. Tracks which WAT calendar days a
+      // user fully rated all featured products, and today's in-progress
+      // ratings.
+      //
+      // NOTE: the stakes here are higher than most other self-owned
+      // collections in this file. Because a day's ENTIRE VIP earning is
+      // gated behind completedDays (not a partial share, unlike the
+      // earlier Read to Earn design this replaced), a technically
+      // sophisticated user editing their own document via dev tools could
+      // fabricate a completed review day and unlock 100% of that day's
+      // earnings without actually reviewing anything. This is the same
+      // class of "no Cloud Function to verify server-side" limitation as
+      // checkins and deposits withdrawals elsewhere in this file, but the
+      // potential impact per act of tampering is larger here. Closing
+      // this fully would require moving completedDays writes into a
+      // Cloud Function that independently verifies real product ratings
+      // were submitted — flagged as a priority follow-up if this feature
+      // sees real usage, not just a passive note.
+      allow read, write: if isOwner(userId);
+    }
+
+    match /withdrawalRequests/{requestId} {
+      // Combines VIP profit + Referral Bonus + Welcome Bonus + Check-in
+      // balance into ONE withdrawal request per the site owner's request
+      // to stop showing these as separate withdrawable "tags." The actual
+      // balance deductions happen in the SAME client-side transaction
+      // that creates this document (see services/withdrawalRequests.js
+      // requestCombinedWithdrawal) — across users/checkins/deposits — so
+      // this document is primarily a record of what was requested and
+      // from where, for admin visibility and for exactly reversing the
+      // deduction if the request is later rejected.
+      //
+      // Any signed-in user can read (same reasoning as deposits: needed
+      // for the admin queue, and nothing here is more sensitive than data
+      // a user already sees about their own withdrawal history).
+      allow read: if isSignedIn();
+
+      // A user may create a request only for themselves, starting as
+      // "pending" with no paidAt/decidedAt yet — preventing a forged
+      // pre-approved withdrawal from being submitted directly. This does
+      // NOT independently verify the breakdown amounts are correct or
+      // that the underlying balances were genuinely sufficient — that
+      // check happens client-side before the transaction runs. Same
+      // "no Cloud Function to verify server-side" limitation noted
+      // elsewhere in this file; the deduction transaction itself (see
+      // the users/checkins/deposits update rules above) is what actually
+      // prevents a user from creating a request for MORE than they have,
+      // since those rules require balances to only ever decrease.
+      allow create: if isSignedIn() &&
+        request.resource.data.userId == request.auth.uid &&
+        request.resource.data.status == "pending" &&
+        !("paidAt" in request.resource.data) &&
+        !("decidedAt" in request.resource.data);
+
+      // Only an admin may update a request (mark paid / reject) — a user
+      // can never edit their own request after submitting it, preventing
+      // e.g. a rejected request from being silently flipped back to
+      // "pending" or "paid" by the user themselves.
+      allow update: if isAdmin();
 
       allow delete: if isAdmin();
     }

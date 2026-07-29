@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { C, buttonStyle, cardStyle, labelStyle } from "../styles/theme";
-import { getAllDeposits, approveDeposit, rejectDeposit, markWithdrawalPaid, rejectWithdrawal } from "../services/deposits";
+import { getAllDeposits, approveDeposit, rejectDeposit } from "../services/deposits";
+import { getAllWithdrawalRequests, markCombinedWithdrawalPaid, rejectCombinedWithdrawal } from "../services/withdrawalRequests";
 import FormInput from "../components/FormInput";
 import { ErrorBox, SuccessBox } from "../components/MessageBox";
 
@@ -43,6 +44,7 @@ function withdrawalAge(requestedAt) {
 
 export default function AdminDepositsPage() {
   const [deposits, setDeposits] = useState([]);
+  const [withdrawalRequests, setWithdrawalRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState("pending");
   const [notes, setNotes] = useState({});
@@ -56,8 +58,9 @@ export default function AdminDepositsPage() {
   async function load() {
     setLoading(true);
     try {
-      const all = await getAllDeposits();
-      setDeposits(all);
+      const [allDeposits, allWithdrawals] = await Promise.all([getAllDeposits(), getAllWithdrawalRequests()]);
+      setDeposits(allDeposits);
+      setWithdrawalRequests(allWithdrawals);
     } catch (e) {
       console.error(e);
       setErr("Could not load deposits.");
@@ -103,10 +106,10 @@ export default function AdminDepositsPage() {
     setBusyId(null);
   }
 
-  async function handleMarkPaid(dep) {
-    setBusyId(dep.id);
+  async function handleMarkPaid(req) {
+    setBusyId(req.id);
     try {
-      await markWithdrawalPaid(dep.id, dep.lastWithdrawalRequest);
+      await markCombinedWithdrawalPaid(req.id);
       setOk("Withdrawal marked as paid.");
       await load();
     } catch (e) {
@@ -116,10 +119,10 @@ export default function AdminDepositsPage() {
     setBusyId(null);
   }
 
-  async function handleRejectWithdrawal(dep) {
-    setBusyId(dep.id);
+  async function handleRejectWithdrawal(req) {
+    setBusyId(req.id);
     try {
-      await rejectWithdrawal(dep.id, dep.lifetimeWithdrawn, dep.lastWithdrawalRequest);
+      await rejectCombinedWithdrawal(req);
       setOk("Withdrawal rejected and balance restored.");
       await load();
     } catch (e) {
@@ -145,9 +148,9 @@ export default function AdminDepositsPage() {
     approved: deposits.filter((d) => d.status === "approved").length,
     rejected: deposits.filter((d) => d.status === "rejected").length,
   };
-  const pendingWithdrawals = deposits
-    .filter((d) => d.lastWithdrawalRequest?.status === "pending")
-    .sort((a, b) => a.lastWithdrawalRequest.requestedAt - b.lastWithdrawalRequest.requestedAt);
+  const pendingWithdrawals = withdrawalRequests
+    .filter((r) => r.status === "pending")
+    .sort((a, b) => a.requestedAt - b.requestedAt);
 
   if (loading) return <div style={{ textAlign: "center", padding: 60, color: C.dim }}>Loading deposits…</div>;
 
@@ -180,13 +183,19 @@ export default function AdminDepositsPage() {
             Pending Withdrawal Requests
           </h3>
           <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 24 }}>
-            {pendingWithdrawals.map((d) => {
-              const age = withdrawalAge(d.lastWithdrawalRequest.requestedAt);
+            {pendingWithdrawals.map((req) => {
+              const age = withdrawalAge(req.requestedAt);
+              const b = req.breakdown || {};
+              const parts = [];
+              if (b.vipProfit > 0) parts.push(`VIP Profit ₦${b.vipProfit.toLocaleString()}`);
+              if (b.referral > 0) parts.push(`Referral ₦${b.referral.toLocaleString()}`);
+              if (b.welcome > 0) parts.push(`Welcome ₦${b.welcome.toLocaleString()}`);
+              if (b.checkIn > 0) parts.push(`Check-In ₦${b.checkIn.toLocaleString()}`);
               return (
-                <div key={d.id} style={{ ...cardStyle, border: "1px solid rgba(123,158,217,0.3)", padding: 14 }}>
+                <div key={req.id} style={{ ...cardStyle, border: "1px solid rgba(123,158,217,0.3)", padding: 14 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
                     <div style={{ fontSize: 13 }}>
-                      <strong style={{ color: "#F9F1E7" }}>{d.userName}</strong> — ₦{(d.lastWithdrawalRequest.amount || 0).toLocaleString()}
+                      <strong style={{ color: "#F9F1E7" }}>{req.userName}</strong> — ₦{(req.amount || 0).toLocaleString()}
                     </div>
                     <span
                       style={{
@@ -202,14 +211,19 @@ export default function AdminDepositsPage() {
                       {age.label}
                     </span>
                   </div>
-                  <div style={{ fontSize: 12, color: C.muted, marginBottom: 10 }}>
-                    {d.lastWithdrawalRequest.bank} · {d.lastWithdrawalRequest.accNo} · {d.lastWithdrawalRequest.accName}
+                  <div style={{ fontSize: 12, color: C.muted, marginBottom: 4 }}>
+                    {req.bankDetails?.bank} · {req.bankDetails?.accNo} · {req.bankDetails?.accName}
                   </div>
+                  {parts.length > 0 && (
+                    <div style={{ fontSize: 10.5, color: C.dim, marginBottom: 10 }}>
+                      Combined from: {parts.join(" · ")}
+                    </div>
+                  )}
                   <div style={{ display: "flex", gap: 8 }}>
-                    <button style={{ ...buttonStyle("gold"), flex: 1, fontSize: 12, padding: "8px" }} onClick={() => handleMarkPaid(d)} disabled={busyId === d.id}>
+                    <button style={{ ...buttonStyle("gold"), flex: 1, fontSize: 12, padding: "8px" }} onClick={() => handleMarkPaid(req)} disabled={busyId === req.id}>
                       Mark Paid
                     </button>
-                    <button style={{ ...buttonStyle("danger"), flex: 1, fontSize: 12, padding: "8px" }} onClick={() => handleRejectWithdrawal(d)} disabled={busyId === d.id}>
+                    <button style={{ ...buttonStyle("danger"), flex: 1, fontSize: 12, padding: "8px" }} onClick={() => handleRejectWithdrawal(req)} disabled={busyId === req.id}>
                       Reject
                     </button>
                   </div>

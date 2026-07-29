@@ -3,6 +3,7 @@ import { C, buttonStyle, cardStyle } from "../styles/theme";
 import { getAllDeposits } from "../services/deposits";
 import { getReviewStatus, countReviewedEarningDays } from "../services/reviews";
 import { calculateInvestmentEarnings, getDaysEarning } from "../utils/earnings";
+import { getAllWithdrawalRequests } from "../services/withdrawalRequests";
 import FormInput from "../components/FormInput";
 
 function fmt(n) {
@@ -11,26 +12,6 @@ function fmt(n) {
 
 function fmtDate(ts) {
   return new Date(ts).toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric" });
-}
-
-function fmtDateTime(ts) {
-  return new Date(ts).toLocaleString("en-NG", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
-}
-
-// Same "how long has this been sitting" indicator as AdminDepositsPage —
-// duplicated rather than shared via a new utils file, consistent with
-// this codebase's existing pattern of small page-local display helpers
-// (see fmtDate/fmtDateTime here vs in AdminDepositsPage) rather than
-// introducing a shared module for a few lines of formatting logic.
-function withdrawalAge(requestedAt) {
-  const hoursAgo = (Date.now() - requestedAt) / (60 * 60 * 1000);
-  if (hoursAgo < 24) {
-    const h = Math.max(1, Math.floor(hoursAgo));
-    return { label: `${h}h ago`, color: "#3DBE6C" };
-  }
-  const days = Math.floor(hoursAgo / 24);
-  if (days <= 3) return { label: `${days}d ago`, color: "#E8B84B" };
-  return { label: `${days}d ago — overdue`, color: "#E0685E" };
 }
 
 function chipStyle(color) {
@@ -71,6 +52,7 @@ export default function AdminEarningsPage() {
   const [searchName, setSearchName] = useState("");
   const [filter, setFilter] = useState("all"); // all | grace | pending_withdrawal | has_balance
   const [readStats, setReadStats] = useState(null);
+  const [pendingWithdrawalCount, setPendingWithdrawalCount] = useState(0);
 
   async function load() {
     setLoading(true);
@@ -79,6 +61,17 @@ export default function AdminEarningsPage() {
     try {
       const allDeposits = await getAllDeposits();
       const approved = allDeposits.filter((d) => d.status === "approved");
+
+      // Combined withdrawal requests now live in their own collection
+      // (withdrawalRequests) rather than being tagged onto a single
+      // deposit — a combined request can span VIP profit AND bonuses,
+      // so it no longer maps cleanly onto one investment.
+      try {
+        const allWithdrawals = await getAllWithdrawalRequests();
+        setPendingWithdrawalCount(allWithdrawals.filter((r) => r.status === "pending").length);
+      } catch (e) {
+        console.error("Failed to load withdrawal requests:", e);
+      }
 
       // Fetch each unique user's review record once, not once per investment.
       const uniqueUserIds = [...new Set(approved.map((d) => d.userId))];
@@ -104,11 +97,21 @@ export default function AdminEarningsPage() {
       // guessing at the right time to add that complexity upfront.
       setReadStats({ userCount: uniqueUserIds.length, loadMs: Date.now() - loadStartedAt });
 
+      // A single `now` is captured once and reused across the whole map
+      // (and for calculateInvestmentEarnings below), so
+      // countReviewedEarningDays() is always evaluated against the same
+      // instant getDaysEarning-equivalent logic uses internally —
+      // previously this passed daysEarning's RESULT (elapsed 24-hour
+      // periods) into countReviewedEarningDays where it was treated as
+      // elapsed calendar days, which drift apart depending on what time
+      // of day a deposit was approved, causing genuinely-reviewed days to
+      // go undetected (this is what the site owner reported: "users keep
+      // reviewing but it doesn't reflect here").
+      const now = Date.now();
       const enriched = approved.map((d) => {
         const completedDays = reviewsByUser.get(d.userId) || [];
-        const daysEarningSoFar = getDaysEarning(d.approvedAt);
-        const reviewedDayCount = countReviewedEarningDays(d.approvedAt, daysEarningSoFar, completedDays);
-        const calc = calculateInvestmentEarnings(d.planDaily, d.approvedAt, d.lifetimeWithdrawn || 0, reviewedDayCount);
+        const reviewedDayCount = countReviewedEarningDays(d.approvedAt, now, completedDays);
+        const calc = calculateInvestmentEarnings(d.planDaily, d.approvedAt, d.lifetimeWithdrawn || 0, reviewedDayCount, now);
         return { ...d, ...calc, reviewedDayCount };
       });
 
@@ -135,14 +138,12 @@ export default function AdminEarningsPage() {
     filtered = filtered.filter((i) => i.userName?.toLowerCase().includes(q) || i.userEmail?.toLowerCase().includes(q));
   }
   if (filter === "grace") filtered = filtered.filter((i) => i.stillInGracePeriod);
-  if (filter === "pending_withdrawal") filtered = filtered.filter((i) => i.lastWithdrawalRequest?.status === "pending");
   if (filter === "has_balance") filtered = filtered.filter((i) => i.withdrawableBalance > 0);
 
   const totals = {
     withdrawable: investments.reduce((s, i) => s + i.withdrawableBalance, 0),
     lifetimeWithdrawn: investments.reduce((s, i) => s + (i.lifetimeWithdrawn || 0), 0),
     missed: investments.reduce((s, i) => s + i.missedEarnings, 0),
-    pendingWithdrawals: investments.filter((i) => i.lastWithdrawalRequest?.status === "pending").length,
   };
 
   if (loading) return <div style={{ textAlign: "center", padding: 60, color: C.dim }}>Loading earnings overview…</div>;
@@ -177,7 +178,7 @@ export default function AdminEarningsPage() {
         </div>
         <div style={{ ...cardStyle, border: `1px solid ${C.emerald}28`, padding: 14 }}>
           <div style={{ fontSize: 10, color: C.dim, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 6 }}>Pending Withdrawal Requests</div>
-          <div style={{ fontSize: 20, fontWeight: 800, color: C.emerald }}>{totals.pendingWithdrawals}</div>
+          <div style={{ fontSize: 20, fontWeight: 800, color: C.emerald }}>{pendingWithdrawalCount}</div>
         </div>
       </div>
 
@@ -189,7 +190,6 @@ export default function AdminEarningsPage() {
         {[
           { key: "all", label: `All (${investments.length})` },
           { key: "has_balance", label: "Has withdrawable balance" },
-          { key: "pending_withdrawal", label: "Pending withdrawal request" },
           { key: "grace", label: "Still in 24h grace period" },
         ].map((f) => (
           <button key={f.key} onClick={() => setFilter(f.key)} style={{ ...buttonStyle(filter === f.key ? "gold" : "ghost"), padding: "7px 14px", fontSize: 12 }}>
@@ -212,7 +212,6 @@ export default function AdminEarningsPage() {
                     <span style={{ fontSize: 15, color: "#F9F1E7", fontWeight: 600 }}>{inv.userName}</span>
                     <span style={chipStyle(C.emerald)}>{inv.planLabel}</span>
                     {inv.stillInGracePeriod && <span style={chipStyle(C.dim)}>GRACE PERIOD</span>}
-                    {inv.lastWithdrawalRequest?.status === "pending" && <span style={chipStyle(C.gold)}>WITHDRAWAL PENDING</span>}
                   </div>
                   <div style={{ fontSize: 12, color: C.muted }}>{inv.userEmail}</div>
                   <div style={{ fontSize: 11, color: C.dim, marginTop: 4 }}>
@@ -247,34 +246,6 @@ export default function AdminEarningsPage() {
                   <div style={{ fontSize: 13, color: "#F9F1E7", fontWeight: 600 }}>₦{fmt(inv.lifetimeWithdrawn || 0)}</div>
                 </div>
               </div>
-
-              {inv.lastWithdrawalRequest && (
-                <div style={{ marginTop: 10, fontSize: 12, color: C.muted }}>
-                  Last withdrawal request: ₦{fmt(inv.lastWithdrawalRequest.amount)} —{" "}
-                  <span style={{ color: inv.lastWithdrawalRequest.status === "paid" ? C.green : inv.lastWithdrawalRequest.status === "rejected" ? C.red : C.emerald, fontWeight: 700 }}>
-                    {inv.lastWithdrawalRequest.status.toUpperCase()}
-                  </span>{" "}
-                  · requested {fmtDateTime(inv.lastWithdrawalRequest.requestedAt)}
-                  {inv.lastWithdrawalRequest.status === "pending" && (() => {
-                    const age = withdrawalAge(inv.lastWithdrawalRequest.requestedAt);
-                    return (
-                      <span
-                        style={{
-                          marginLeft: 8,
-                          fontSize: 10.5,
-                          fontWeight: 700,
-                          color: age.color,
-                          background: `${age.color}1c`,
-                          padding: "2px 8px",
-                          borderRadius: 20,
-                        }}
-                      >
-                        {age.label}
-                      </span>
-                    );
-                  })()}
-                </div>
-              )}
             </div>
           ))}
         </div>

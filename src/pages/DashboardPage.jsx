@@ -16,8 +16,7 @@ import ActionGrid from "../components/ActionGrid";
 import ActivityFeed from "../components/ActivityFeed";
 import WelcomeBanner from "../components/WelcomeBanner";
 import DepositModal from "../components/DepositModal";
-import WithdrawModal from "../components/WithdrawModal";
-import BonusWithdrawModal from "../components/BonusWithdrawModal";
+import CombinedWithdrawModal from "../components/CombinedWithdrawModal";
 import { getActivityFeed } from "../services/activityFeed";
 
 function chipStyle(color) {
@@ -47,11 +46,11 @@ export default function DashboardPage() {
   const [activityEvents, setActivityEvents] = useState([]);
   const [completedReviewDays, setCompletedReviewDays] = useState([]);
   const [checkInBalance, setCheckInBalance] = useState(0);
+  const [checkInLifetimeWithdrawn, setCheckInLifetimeWithdrawn] = useState(0);
   const [loading, setLoading] = useState(true);
   const [showDeposit, setShowDeposit] = useState(false);
   const [preselectedPlanId, setPreselectedPlanId] = useState(null);
-  const [withdrawTarget, setWithdrawTarget] = useState(null);
-  const [showBonusWithdraw, setShowBonusWithdraw] = useState(false);
+  const [showWithdraw, setShowWithdraw] = useState(false);
   const [statScrollPaused, setStatScrollPaused] = useState(false);
   const [tick, setTick] = useState(0);
 
@@ -71,6 +70,7 @@ export default function DashboardPage() {
       // balance correctly, but the summary cards never knew about it).
       const checkInStatus = await getCheckInStatus(user.uid);
       setCheckInBalance(checkInStatus.unlockedBalance || 0);
+      setCheckInLifetimeWithdrawn(checkInStatus.lifetimeWithdrawn || 0);
       // Also refresh the user profile — referralBonusTotal can change from
       // an admin approving someone else's deposit (this user acting as the
       // referrer), which this session wouldn't otherwise see until re-login.
@@ -122,14 +122,11 @@ export default function DashboardPage() {
     setShowDeposit(true);
   }
 
-  // Picks the investment with the largest withdrawable balance as the
-  // default target when withdrawing via the quick-action grid (which,
-  // unlike the per-investment withdraw button, has no specific investment
-  // context of its own). If nothing is withdrawable yet, this is a no-op —
-  // there's nothing sensible to open.
-  function openQuickWithdraw() {
-    const best = [...investments].sort((a, b) => b.withdrawableBalance - a.withdrawableBalance)[0];
-    if (best && best.withdrawableBalance > 0) setWithdrawTarget(best);
+  // Opens the single combined withdraw flow — covers VIP profit, Referral
+  // Bonus, Welcome Bonus, and Check-in balance together, replacing what
+  // used to be several separate withdraw buttons/modals per source.
+  function openWithdraw() {
+    setShowWithdraw(true);
   }
 
   function openSupport() {
@@ -143,16 +140,18 @@ export default function DashboardPage() {
   // Enrich each approved deposit with live earnings figures using the
   // shared calculation utility — the single source of truth for the
   // 24h-delay, capital-locked, profit-only-withdrawal, and daily-review
-  // gate rules. Computing this needs two passes: first getDaysEarning() to
-  // know how many earning-days have elapsed, then countReviewedEarningDays()
-  // to see how many of those specific days the user fully completed their
-  // product reviews, before calculateInvestmentEarnings() can determine
-  // how much is actually available (unreviewed days earn ₦0, permanently).
+  // gate rules. A single `now` is captured once and reused for both
+  // getDaysEarning() and countReviewedEarningDays() so they're always
+  // evaluated against the same instant — passing daysEarning's RESULT
+  // into countReviewedEarningDays() instead (an earlier version of this
+  // code did) caused reviewed days to go undetected, since elapsed
+  // 24-hour periods and elapsed WAT calendar days drift apart depending
+  // on what time of day a deposit was approved.
+  const now = Date.now();
   const investments = approved.map((d) => {
     const plan = VIPS[d.planId] || { label: d.planLabel, daily: d.planDaily, color: C.emerald };
-    const daysEarningSoFar = getDaysEarning(d.approvedAt);
-    const reviewedDayCount = countReviewedEarningDays(d.approvedAt, daysEarningSoFar, completedReviewDays);
-    const calc = calculateInvestmentEarnings(d.planDaily, d.approvedAt, d.lifetimeWithdrawn || 0, reviewedDayCount);
+    const reviewedDayCount = countReviewedEarningDays(d.approvedAt, now, completedReviewDays);
+    const calc = calculateInvestmentEarnings(d.planDaily, d.approvedAt, d.lifetimeWithdrawn || 0, reviewedDayCount, now);
     return { ...d, plan, ...calc };
   });
 
@@ -305,42 +304,11 @@ export default function DashboardPage() {
         );
       })()}
 
-      {(referralBonus + welcomeBonus) > 0 && (
-        <div
-          style={{
-            ...cardStyle,
-            border: `1px solid ${C.crimson}28`,
-            marginBottom: 24,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            flexWrap: "wrap",
-            gap: 12,
-          }}
-        >
-          <div>
-            <div style={{ fontSize: 12, color: C.dim, fontWeight: 600, marginBottom: 2 }}>
-              Referral + Welcome Bonus (not tied to any VIP plan)
-            </div>
-            <div style={{ fontSize: 20, fontWeight: 800, color: C.crimson }}>
-              ₦{fmt(referralBonus + welcomeBonus)}
-            </div>
-          </div>
-          <button
-            style={{ ...buttonStyle(withinHours && (referralBonus + welcomeBonus) > 0 ? "gold" : "ghost"), padding: "9px 20px", fontSize: 13 }}
-            onClick={() => setShowBonusWithdraw(true)}
-            disabled={!withinHours}
-          >
-            💰 {withinHours ? "Withdraw Bonus" : "Withdraw (8AM–10PM WAT only)"}
-          </button>
-        </div>
-      )}
-
       <PromoBanner />
       <ActionGrid
         onDeposit={openNewDeposit}
         onMigrate={openMigrate}
-        onWithdraw={openQuickWithdraw}
+        onWithdraw={openWithdraw}
         onSupport={openSupport}
       />
       <ActivityFeed events={activityEvents} />
@@ -413,15 +381,6 @@ export default function DashboardPage() {
                   <div style={{ fontSize: 11, color: C.dim }}>withdrawable profit</div>
                 </div>
               </div>
-              <div style={{ marginTop: 16 }}>
-                <button
-                  style={{ ...buttonStyle(withinHours && inv.withdrawableBalance > 0 ? "gold" : "ghost"), padding: "9px 20px", fontSize: 13 }}
-                  onClick={() => setWithdrawTarget(inv)}
-                  disabled={!withinHours || inv.withdrawableBalance <= 0}
-                >
-                  💰 {withinHours ? "Withdraw Profit" : "Withdraw (8AM–10PM WAT only)"}
-                </button>
-              </div>
             </div>
           ))}
         </div>
@@ -475,14 +434,17 @@ export default function DashboardPage() {
           onDone={load}
         />
       )}
-      {withdrawTarget && (
-        <WithdrawModal investment={withdrawTarget} userId={user.uid} savedBankDetails={user.savedBankDetails} onClose={() => setWithdrawTarget(null)} onDone={load} />
-      )}
-      {showBonusWithdraw && (
-        <BonusWithdrawModal
+      {showWithdraw && (
+        <CombinedWithdrawModal
           userId={user.uid}
-          availableBalance={referralBonus + welcomeBonus}
-          onClose={() => setShowBonusWithdraw(false)}
+          userName={user.name}
+          investments={investments}
+          referralBonusTotal={referralBonus}
+          welcomeBonus={welcomeBonus}
+          checkInBalance={checkInBalance}
+          checkInLifetimeWithdrawn={checkInLifetimeWithdrawn}
+          savedBankDetails={user.savedBankDetails}
+          onClose={() => setShowWithdraw(false)}
           onDone={load}
         />
       )}

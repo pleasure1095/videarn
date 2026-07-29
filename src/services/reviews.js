@@ -83,15 +83,36 @@ export async function rateProduct(userId, productId, stars) {
  * earlier Read to Earn design, there is no partial credit and no
  * catch-up: a day not fully reviewed earns nothing for that day,
  * permanently.
+ *
+ * FIXED this session: the previous version computed a single
+ * `startDayIndex` from the earnings-start moment, then checked indices
+ * `startDayIndex + i` for `i` in `[0, daysEarning)` — treating daysEarning
+ * (a count of elapsed 24-HOUR PERIODS from the exact approval timestamp)
+ * as if it lined up with elapsed WAT CALENDAR DAYS. These two clocks
+ * drift apart depending on what time of day the deposit was approved: a
+ * deposit approved at, say, 10am WAT has its 24h-period boundaries
+ * falling mid-day, not at the WAT midnight boundary the review system
+ * actually uses — so a user who genuinely reviewed "today" could have
+ * their review land on a calendar-day index the old math never checked,
+ * making it look like 0 days were reviewed even when they weren't.
+ *
+ * Fixed by walking WAT calendar days directly, from the earnings-start
+ * date through TODAY's WAT date (inclusive), checking each real calendar
+ * day rather than an elapsed-period count. Takes `now` instead of
+ * `daysEarning` for this reason — callers should pass the same `now`
+ * they used for getDaysEarning(), not its result.
  */
-export function countReviewedEarningDays(approvedAt, daysEarning, completedDays) {
-  if (daysEarning <= 0) return 0;
+export function countReviewedEarningDays(approvedAt, now, completedDays) {
+  const earningsStart = getEarningsStartTime(approvedAt);
+  if (now < earningsStart) return 0;
+
   const completedSet = new Set(completedDays.map(watDateStringToDayIndex));
-  const startDayIndex = watDateStringToDayIndex(getWATDateString(getEarningsStartTime(approvedAt)));
+  const startDayIndex = watDateStringToDayIndex(getWATDateString(earningsStart));
+  const todayDayIndex = watDateStringToDayIndex(getWATDateString(now));
 
   let count = 0;
-  for (let i = 0; i < daysEarning; i++) {
-    if (completedSet.has(startDayIndex + i)) count++;
+  for (let idx = startDayIndex; idx <= todayDayIndex; idx++) {
+    if (completedSet.has(idx)) count++;
   }
   return count;
 }

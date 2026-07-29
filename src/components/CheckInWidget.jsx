@@ -1,13 +1,6 @@
 import { useEffect, useState } from "react";
 import { C, buttonStyle } from "../styles/theme";
-import {
-  getCheckInStatus,
-  performCheckIn,
-  withdrawCheckInBalance,
-  CHECKIN_DAILY_REWARD,
-} from "../services/checkins";
-import { isWithinWithdrawalHours } from "../utils/paymentInfo";
-import { MIN_WITHDRAWAL } from "../utils/earnings";
+import { getCheckInStatus, performCheckIn, CHECKIN_DAILY_REWARD } from "../services/checkins";
 
 /**
  * Daily check-in widget. Gated to VIP members only (users with at least
@@ -21,6 +14,16 @@ import { MIN_WITHDRAWAL } from "../utils/earnings";
  * tracked (consecutive-day count, longest streak) for engagement/display
  * purposes, but it no longer gates or forfeits any money — missing a day
  * just resets the visual streak counter back to 1 on the next check-in.
+ *
+ * Does NOT have its own withdraw button — per the site owner's explicit
+ * request to stop showing withdrawable money as separate "tags" per
+ * source, check-in balance now only withdraws through the single
+ * combined withdraw flow on the Dashboard (CombinedWithdrawModal), which
+ * pools VIP profit + Referral Bonus + Welcome Bonus + Check-in balance
+ * into one request. This widget still displays the current balance for
+ * visibility/motivation, it just doesn't let the user withdraw it here
+ * independently — that would let the same balance potentially be drawn
+ * down through two different paths.
  */
 export default function CheckInWidget({ userId, isVipMember }) {
   const [status, setStatus] = useState(null);
@@ -56,25 +59,6 @@ export default function CheckInWidget({ userId, isVipMember }) {
     setBusy(false);
   }
 
-  async function handleWithdraw() {
-    setErr("");
-    setOk("");
-    if (!isWithinWithdrawalHours()) {
-      setErr("Withdrawals are available daily between 8:00 AM and 10:00 PM (WAT).");
-      return;
-    }
-    setBusy(true);
-    try {
-      await withdrawCheckInBalance(userId, status.unlockedBalance, status.unlockedBalance, status.lifetimeWithdrawn);
-      setOk(`₦${status.unlockedBalance.toLocaleString()} withdrawal submitted!`);
-      await load();
-    } catch (e) {
-      console.error("Check-in withdrawal failed:", e);
-      setErr(e.message || "Could not submit withdrawal.");
-    }
-    setBusy(false);
-  }
-
   if (!isVipMember) {
     return (
       <div
@@ -98,8 +82,6 @@ export default function CheckInWidget({ userId, isVipMember }) {
   }
 
   if (!status) return null;
-
-  const canWithdraw = status.unlockedBalance >= MIN_WITHDRAWAL;
 
   return (
     <div
@@ -143,33 +125,12 @@ export default function CheckInWidget({ userId, isVipMember }) {
             marginTop: 12,
             paddingTop: 12,
             borderTop: `1px solid ${C.gold}20`,
+            fontSize: 13,
+            fontWeight: 700,
+            color: C.green,
           }}
         >
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              flexWrap: "wrap",
-              gap: 10,
-            }}
-          >
-            <div style={{ fontSize: 13, fontWeight: 700, color: C.green }}>
-              ₦{status.unlockedBalance.toLocaleString()} available
-            </div>
-            <button
-              style={{ ...buttonStyle(canWithdraw ? "gold" : "ghost"), padding: "8px 16px", fontSize: 12 }}
-              onClick={handleWithdraw}
-              disabled={busy || !canWithdraw}
-            >
-              {canWithdraw ? "Withdraw" : `Min ₦${MIN_WITHDRAWAL.toLocaleString()}`}
-            </button>
-          </div>
-          {!canWithdraw && (
-            <p style={{ fontSize: 11, color: C.dim, marginTop: 8, fontWeight: 600 }}>
-              Keep checking in daily — you'll reach the ₦{MIN_WITHDRAWAL.toLocaleString()} withdrawal minimum soon.
-            </p>
-          )}
+          ₦{status.unlockedBalance.toLocaleString()} available — withdraw anytime from the main Withdraw button
         </div>
       )}
     </div>

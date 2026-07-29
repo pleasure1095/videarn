@@ -4,6 +4,7 @@ import { getEarningsStartTime } from "../utils/earnings";
 import { getTodaysProducts } from "../utils/products";
 
 const REVIEWS_COLLECTION = "reviews";
+const RATING_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 
 // WAT (UTC+1) day boundary, consistent with check-in and withdrawal-hours
 // conventions used elsewhere in the app.
@@ -23,25 +24,50 @@ function todayDayIndex() {
 
 /**
  * Fetches a user's review record: which WAT dates they've fully completed
- * (rated every featured product that day), and today's in-progress
- * ratings (in case they've rated some but not all of today's products).
+ * (rated every featured product that day), today's in-progress ratings
+ * (in case they've rated some but not all of today's products), and
+ * whether they're currently locked out by the 24h rolling rating cooldown.
+ *
+ * IMPORTANT — two independent clocks, on purpose:
+ *  - WHICH PRODUCTS ARE SHOWN and WHICH DAYS COUNT TOWARD EARNINGS still
+ *    run on the existing shared WAT-calendar-day system (completedDays,
+ *    getTodaysProducts) — this is UNCHANGED, since earnings math
+ *    (countReviewedEarningDays in this file, calculateInvestmentEarnings
+ *    in utils/earnings.js) already depends on it and was hand-verified
+ *    this session; rebuilding it around a per-user rolling clock would
+ *    risk reintroducing that exact class of bug.
+ *  - WHETHER THE RATE BUTTONS ARE ENABLED is a SEPARATE, new 24h rolling
+ *    check based on `lastRatingAt` (a precise timestamp, not a date
+ *    string) — a user who rates at 11pm is locked out until 11pm the
+ *    NEXT day, even though the featured products themselves may have
+ *    already switched to a new calendar day's set at WAT midnight in
+ *    between. They'll see new products, but can't rate until their
+ *    personal 24h timer runs out.
  */
 export async function getReviewStatus(userId) {
   const snap = await getDoc(doc(db, REVIEWS_COLLECTION, userId));
   const today = getWATDateString();
   const todaysProducts = getTodaysProducts(todayDayIndex());
+  const now = Date.now();
 
   if (!snap.exists()) {
-    return { completedDays: [], todaysRatings: {}, today, todaysProducts };
+    return { completedDays: [], todaysRatings: {}, today, todaysProducts, lastRatingAt: null, cooldownActive: false, cooldownEndsAt: null };
   }
 
   const data = snap.data();
   const todaysRatings = data.lastRatingDate === today ? data.todaysRatings || {} : {};
+  const lastRatingAt = data.lastRatingAt || null;
+  const cooldownEndsAt = lastRatingAt ? lastRatingAt + RATING_COOLDOWN_MS : null;
+  const cooldownActive = cooldownEndsAt != null && now < cooldownEndsAt;
+
   return {
     completedDays: data.completedDays || [],
     todaysRatings,
     today,
     todaysProducts,
+    lastRatingAt,
+    cooldownActive,
+    cooldownEndsAt,
   };
 }
 
@@ -49,11 +75,26 @@ export async function getReviewStatus(userId) {
  * Records a star rating (1-5) for one of today's products. If this
  * completes ratings for ALL of today's products, marks today as a
  * completed review-day, which is what unlocks that day's VIP earnings.
+ *
+ * The 24h rolling cooldown only STARTS once a full day's set is
+ * COMPLETED (allRated === true) — not after every individual product
+ * rating. Setting it after each single rating would lock a user out
+ * partway through rating today's 3 products (e.g. blocked from rating
+ * product 2 just because they rated product 1 a minute earlier), which
+ * defeats the purpose entirely. Enforced server-side (not just in the
+ * UI) — throws if called while a previous COMPLETED day's cooldown is
+ * still active, so a user can't bypass the lockout by calling this
+ * directly.
  */
 export async function rateProduct(userId, productId, stars) {
   if (stars < 1 || stars > 5) throw new Error("Rating must be between 1 and 5 stars.");
 
   const status = await getReviewStatus(userId);
+  if (status.cooldownActive) {
+    const hoursLeft = Math.ceil((status.cooldownEndsAt - Date.now()) / (60 * 60 * 1000));
+    throw new Error(`You can rate again in about ${hoursLeft} hour${hoursLeft === 1 ? "" : "s"}.`);
+  }
+
   const updatedRatings = { ...status.todaysRatings, [productId]: stars };
 
   const allRated = status.todaysProducts.every((p) => updatedRatings[p.id] != null);
@@ -61,18 +102,32 @@ export async function rateProduct(userId, productId, stars) {
     ? [...status.completedDays, status.today]
     : status.completedDays;
 
-  await setDoc(doc(db, REVIEWS_COLLECTION, userId), {
+  const now = Date.now();
+  // Only stamp lastRatingAt (which starts the 24h cooldown) once the
+  // full set is complete — a partial rating (1 or 2 of 3 products)
+  // should NOT start the clock, since the user still needs to rate the
+  // remaining products in this same sitting.
+  const docUpdate = {
     completedDays: updatedCompletedDays,
     todaysRatings: updatedRatings,
     lastRatingDate: status.today,
-  });
+  };
+  if (allRated) {
+    docUpdate.lastRatingAt = now;
+  }
 
+  await setDoc(doc(db, REVIEWS_COLLECTION, userId), docUpdate, { merge: true });
+
+  const cooldownEndsAt = allRated ? now + RATING_COOLDOWN_MS : status.cooldownEndsAt;
   return {
     completedDays: updatedCompletedDays,
     todaysRatings: updatedRatings,
     today: status.today,
     todaysProducts: status.todaysProducts,
     allRatedToday: allRated,
+    lastRatingAt: allRated ? now : status.lastRatingAt,
+    cooldownActive: allRated,
+    cooldownEndsAt,
   };
 }
 

@@ -1,6 +1,6 @@
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { db } from "./firebase";
-import { getEarningsStartTime } from "../utils/earnings";
+import { getEarningsStartTime, getDaysEarning } from "../utils/earnings";
 import { getTodaysProducts } from "../utils/products";
 
 const REVIEWS_COLLECTION = "reviews";
@@ -132,42 +132,74 @@ export async function rateProduct(userId, productId, stars) {
 }
 
 /**
- * Counts how many of an investment's elapsed earning-days fall on a WAT
- * date the user FULLY completed (rated every featured product) — this is
- * the `reviewedDayCount` figure utils/earnings.js needs. Unlike the
- * earlier Read to Earn design, there is no partial credit and no
- * catch-up: a day not fully reviewed earns nothing for that day,
- * permanently.
+ * Counts how many of an investment's elapsed earning-days are PAID —
+ * under the current catch-up rule, a missed day is not lost forever, it's
+ * deferred: the next time the user completes a FULL day's review, that
+ * single action pays out every unpaid day back through their last
+ * completed review (or back to earnings-start, if this is their first
+ * ever completed review), all at once. Days after their most recent
+ * completed review are still unpaid until their next review — the user
+ * still has to keep reviewing to keep earning, this only removes the
+ * "gone forever" part of missing a day.
  *
- * FIXED this session: the previous version computed a single
- * `startDayIndex` from the earnings-start moment, then checked indices
- * `startDayIndex + i` for `i` in `[0, daysEarning)` — treating daysEarning
- * (a count of elapsed 24-HOUR PERIODS from the exact approval timestamp)
- * as if it lined up with elapsed WAT CALENDAR DAYS. These two clocks
- * drift apart depending on what time of day the deposit was approved: a
- * deposit approved at, say, 10am WAT has its 24h-period boundaries
- * falling mid-day, not at the WAT midnight boundary the review system
- * actually uses — so a user who genuinely reviewed "today" could have
- * their review land on a calendar-day index the old math never checked,
- * making it look like 0 days were reviewed even when they weren't.
+ * CHANGED FROM THE ORIGINAL "NO CATCH-UP" DESIGN (per explicit site owner
+ * request): the earlier version only counted days that were themselves
+ * individually reviewed, with no partial credit and no way to recover a
+ * missed day. Confirmed with the site owner: (1) catch-up is unlimited —
+ * no cap on how many missed days can be backfilled by one review, (2) one
+ * completed review clears the ENTIRE backlog up to that point in a single
+ * moment, not day-by-day, (3) this is NOT a one-time unlock — a user still
+ * has to review again to get paid for days after their last completed
+ * review; skipping again just starts a new backlog rather than losing
+ * those days outright.
  *
- * Fixed by walking WAT calendar days directly, from the earnings-start
- * date through TODAY's WAT date (inclusive), checking each real calendar
- * day rather than an elapsed-period count. Takes `now` instead of
- * `daysEarning` for this reason — callers should pass the same `now`
- * they used for getDaysEarning(), not its result.
+ * Implementation: find the LATEST WAT day, at or after earnings-start,
+ * that the user has in completedDays. Every day from earnings-start
+ * through that day (inclusive) is paid — that's what "the review clears
+ * the whole backlog up to now" means mechanically. Days after that latest
+ * completion (if any) are simply not yet paid, exactly like the original
+ * design treated every unreviewed day, until the next completion moves
+ * this boundary forward.
  */
 export function countReviewedEarningDays(approvedAt, now, completedDays) {
   const earningsStart = getEarningsStartTime(approvedAt);
   if (now < earningsStart) return 0;
 
-  const completedSet = new Set(completedDays.map(watDateStringToDayIndex));
   const startDayIndex = watDateStringToDayIndex(getWATDateString(earningsStart));
   const todayDayIndex = watDateStringToDayIndex(getWATDateString(now));
 
-  let count = 0;
-  for (let idx = startDayIndex; idx <= todayDayIndex; idx++) {
-    if (completedSet.has(idx)) count++;
+  // Latest completed day index that falls within this investment's
+  // earning window (on or after start, on or before today) — anything
+  // completed before the investment even started, or somehow in the
+  // future, isn't relevant to this investment's backlog.
+  let latestPaidDayIndex = -1;
+  for (const dateString of completedDays) {
+    const idx = watDateStringToDayIndex(dateString);
+    if (idx >= startDayIndex && idx <= todayDayIndex && idx > latestPaidDayIndex) {
+      latestPaidDayIndex = idx;
+    }
   }
-  return count;
+
+  if (latestPaidDayIndex === -1) return 0; // never reviewed yet within this window — nothing paid
+  return latestPaidDayIndex - startDayIndex + 1;
+}
+
+/**
+ * Whether TODAY's WAT calendar day is currently PAID for this investment
+ * under the catch-up rule — i.e. today falls within the earning window
+ * (past the 24h grace period) and the days-paid count has caught up to
+ * the days-elapsed count. Since today is always the most recent possible
+ * elapsed day, this is only true once the user has completed today's
+ * review specifically (an earlier review can't reach into the future to
+ * cover a day that hadn't happened yet).
+ *
+ * Reuses countReviewedEarningDays() and getDaysEarning() directly so this
+ * can never disagree with the cumulative figures they're drawn from.
+ */
+export function hasEarnedToday(approvedAt, now, completedDays) {
+  const earningsStart = getEarningsStartTime(approvedAt);
+  if (now < earningsStart) return false;
+  const daysEarning = getDaysEarning(approvedAt, now);
+  const reviewedDayCount = countReviewedEarningDays(approvedAt, now, completedDays);
+  return reviewedDayCount >= daysEarning;
 }

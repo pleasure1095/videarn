@@ -313,7 +313,7 @@ export default function DashboardPage() {
       />
       <ActivityFeed events={activityEvents} />
       <CheckInWidget userId={user.uid} isVipMember={isVipMember} />
-      <DailyReviewsWidget userId={user.uid} isVipMember={isVipMember} />
+      <DailyReviewsWidget userId={user.uid} isVipMember={isVipMember} onEarningsUnlocked={load} />
       <EarnersTicker />
       <PlanCarousel />
 

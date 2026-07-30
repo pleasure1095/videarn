@@ -13,6 +13,7 @@ import NotificationsPage from "./pages/NotificationsPage";
 import SettingsPage from "./pages/SettingsPage";
 import AdminDepositsPage from "./pages/AdminDepositsPage";
 import AdminEarningsPage from "./pages/AdminEarningsPage";
+import AdminWithdrawalsPage from "./pages/AdminWithdrawalsPage";
 import ManageUsersPage from "./pages/ManageUsersPage";
 
 export default function App() {
@@ -71,6 +72,7 @@ export default function App() {
     if (isAdmin) {
       if (activeTab === "users") return <ManageUsersPage />;
       if (activeTab === "earnings") return <AdminEarningsPage />;
+      if (activeTab === "withdrawals") return <AdminWithdrawalsPage />;
       return <AdminDepositsPage />;
     }
     if (activeTab === "plans") return <VipPlansPage onJoined={() => setTab("dashboard")} />;

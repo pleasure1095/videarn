@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { C, buttonStyle, cardStyle } from "../styles/theme";
 import { getAllDeposits } from "../services/deposits";
-import { getReviewStatus, countReviewedEarningDays } from "../services/reviews";
+import { getReviewStatus, countReviewedEarningDays, hasEarnedToday } from "../services/reviews";
 import { calculateInvestmentEarnings, getDaysEarning } from "../utils/earnings";
 import { getAllWithdrawalRequests } from "../services/withdrawalRequests";
 import FormInput from "../components/FormInput";
@@ -112,7 +112,8 @@ export default function AdminEarningsPage() {
         const completedDays = reviewsByUser.get(d.userId) || [];
         const reviewedDayCount = countReviewedEarningDays(d.approvedAt, now, completedDays);
         const calc = calculateInvestmentEarnings(d.planDaily, d.approvedAt, d.lifetimeWithdrawn || 0, reviewedDayCount, now);
-        return { ...d, ...calc, reviewedDayCount };
+        const earnedToday = hasEarnedToday(d.approvedAt, now, completedDays);
+        return { ...d, ...calc, reviewedDayCount, earnedToday };
       });
 
       // Soonest-due (or most overdue-looking) first: sort by withdrawable
@@ -139,6 +140,7 @@ export default function AdminEarningsPage() {
   }
   if (filter === "grace") filtered = filtered.filter((i) => i.stillInGracePeriod);
   if (filter === "has_balance") filtered = filtered.filter((i) => i.withdrawableBalance > 0);
+  if (filter === "review_pending") filtered = filtered.filter((i) => !i.stillInGracePeriod && !i.earnedToday);
 
   const totals = {
     withdrawable: investments.reduce((s, i) => s + i.withdrawableBalance, 0),
@@ -190,6 +192,7 @@ export default function AdminEarningsPage() {
         {[
           { key: "all", label: `All (${investments.length})` },
           { key: "has_balance", label: "Has withdrawable balance" },
+          { key: "review_pending", label: "Hasn't reviewed today" },
           { key: "grace", label: "Still in 24h grace period" },
         ].map((f) => (
           <button key={f.key} onClick={() => setFilter(f.key)} style={{ ...buttonStyle(filter === f.key ? "gold" : "ghost"), padding: "7px 14px", fontSize: 12 }}>
@@ -230,6 +233,12 @@ export default function AdminEarningsPage() {
                   <div style={{ fontSize: 13, color: "#F9F1E7", fontWeight: 600 }}>₦{fmt(inv.planDaily)}/day</div>
                 </div>
                 <div>
+                  <div style={{ fontSize: 10, color: C.dim, textTransform: "uppercase", letterSpacing: "0.06em" }}>Today's Earning</div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: inv.earnedToday ? C.green : C.dim }}>
+                    {inv.stillInGracePeriod ? "In grace period" : inv.earnedToday ? `₦${fmt(inv.planDaily)}` : "Pending — will pay on next review"}
+                  </div>
+                </div>
+                <div>
                   <div style={{ fontSize: 10, color: C.dim, textTransform: "uppercase", letterSpacing: "0.06em" }}>Days Elapsed</div>
                   <div style={{ fontSize: 13, color: "#F9F1E7", fontWeight: 600 }}>{inv.daysEarning}</div>
                 </div>
@@ -238,8 +247,8 @@ export default function AdminEarningsPage() {
                   <div style={{ fontSize: 13, color: "#F9F1E7", fontWeight: 600 }}>{inv.reviewedDayCount} / {inv.daysEarning}</div>
                 </div>
                 <div>
-                  <div style={{ fontSize: 10, color: C.dim, textTransform: "uppercase", letterSpacing: "0.06em" }}>Missed (unreviewed)</div>
-                  <div style={{ fontSize: 13, color: inv.missedEarnings > 0 ? C.red : "#F9F1E7", fontWeight: 600 }}>₦{fmt(inv.missedEarnings)}</div>
+                  <div style={{ fontSize: 10, color: C.dim, textTransform: "uppercase", letterSpacing: "0.06em" }}>Pending (unlocks on next review)</div>
+                  <div style={{ fontSize: 13, color: inv.missedEarnings > 0 ? C.green : "#F9F1E7", fontWeight: 600 }}>₦{fmt(inv.missedEarnings)}</div>
                 </div>
                 <div>
                   <div style={{ fontSize: 10, color: C.dim, textTransform: "uppercase", letterSpacing: "0.06em" }}>Lifetime Withdrawn</div>

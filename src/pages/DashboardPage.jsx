@@ -242,7 +242,7 @@ export default function DashboardPage() {
           { key: "totalInvestment", label: "Total Investment", value: `₦${fmt(totalInvested)}`, color: C.emerald },
           { key: "dailyEarnings", label: "Daily Earnings", value: `₦${fmt(totalDaily)}`, color: C.green },
           { key: "totalEarnings", label: "Total Earnings", value: `₦${fmt(totalAvailableEarnings + checkInBalance)}`, color: C.lime },
-          { key: "missed", label: "Missed (Unreviewed)", value: `₦${fmt(totalMissedEarnings)}`, color: C.dim },
+          { key: "missed", label: "Pending (Unlocks Next Review)", value: `₦${fmt(totalMissedEarnings)}`, color: C.dim },
           { key: "referralBonus", label: "Referral Bonus", value: `₦${fmt(referralBonus)}`, color: C.forest },
           { key: "welcomeBonus", label: "Welcome Bonus", value: `₦${fmt(welcomeBonus)}`, color: "#D4506A" },
           { key: "withdrawable", label: "Withdrawable Profit", value: `₦${fmt(totalWithdrawableProfit + referralBonus + welcomeBonus + checkInBalance)}`, color: C.emerald },
@@ -313,7 +313,7 @@ export default function DashboardPage() {
       />
       <ActivityFeed events={activityEvents} />
       <CheckInWidget userId={user.uid} isVipMember={isVipMember} />
-      <DailyReviewsWidget userId={user.uid} isVipMember={isVipMember} onEarningsUnlocked={load} />
+      <DailyReviewsWidget userId={user.uid} isVipMember={isVipMember} />
       <EarnersTicker />
       <PlanCarousel />
 
@@ -372,7 +372,7 @@ export default function DashboardPage() {
                   )}
                   {inv.missedEarnings > 0 && (
                     <div style={{ fontSize: 11, color: C.dim, marginTop: 4, fontWeight: 600 }}>
-                      ₦{fmt(inv.missedEarnings)} missed on unreviewed days
+                      ₦{fmt(inv.missedEarnings)} pending — complete today's review to unlock it
                     </div>
                   )}
                 </div>

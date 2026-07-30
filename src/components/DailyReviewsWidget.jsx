@@ -27,31 +27,65 @@ function StarRow({ productId, currentRating, onRate, disabled }) {
   );
 }
 
+function formatCooldownRemaining(cooldownEndsAt) {
+  const msLeft = cooldownEndsAt - Date.now();
+  if (msLeft <= 0) return null;
+  const hours = Math.floor(msLeft / (60 * 60 * 1000));
+  const minutes = Math.floor((msLeft % (60 * 60 * 1000)) / (60 * 1000));
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  return `${minutes}m`;
+}
+
 /**
  * VIP-gated daily product-rating widget. Rating ALL of today's featured
- * products unlocks that day's VIP earnings entirely — a confirmed,
- * intentional design where missing the rating means ₦0 earned that day,
- * permanently (no partial credit, no catch-up).
+ * products unlocks earnings — under the catch-up rule, this pays out not
+ * just today but every unpaid day going back to the user's last completed
+ * review, all at once (see countReviewedEarningDays in services/reviews.js
+ * for the exact mechanics). A user still has to keep reviewing regularly
+ * to keep earning — this isn't a one-time unlock, and skipping again just
+ * starts a new backlog rather than losing those days outright.
+ *
+ * 24H ROLLING RATING COOLDOWN: once a user completes a full day's set
+ * (rates all featured products), they're locked out from rating again
+ * for a full 24 hours from that completion — NOT tied to the WAT
+ * calendar day boundary. The featured PRODUCTS shown still rotate at
+ * WAT midnight same as before (unchanged, since earnings math depends
+ * on that), so a user can see a new day's products appear before their
+ * personal 24h cooldown has actually expired — in that case they'll see
+ * the new products but the star buttons stay disabled with a countdown
+ * until they're eligible to rate again.
  *
  * `onEarningsUnlocked` (optional) fires the moment a review day
  * COMPLETES (not on every individual star click) — this lets
  * DashboardPage.jsx immediately refresh its earnings stat cards, so the
  * unlocked amount shows up right away instead of only appearing after a
- * manual page reload. rateProduct() already writes the completed day to
- * Firestore synchronously before this fires, so by the time the Dashboard
- * re-fetches, the new completed day is already there to be counted.
+ * manual page reload.
  */
 export default function DailyReviewsWidget({ userId, isVipMember, onEarningsUnlocked }) {
   const [status, setStatus] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const [, forceTick] = useState(0);
 
   useEffect(() => {
     if (!isVipMember) return;
     getReviewStatus(userId).then(setStatus).catch((e) => console.error("Failed to load review status:", e));
   }, [isVipMember, userId]);
 
+  // Re-render once a minute while a cooldown is active, so the "time
+  // remaining" text stays roughly accurate without needing a manual
+  // refresh, and so the widget correctly unlocks itself the moment the
+  // cooldown actually expires rather than staying stuck disabled until
+  // the next full page load.
+  useEffect(() => {
+    if (!status?.cooldownActive) return;
+    const t = setInterval(() => forceTick((n) => n + 1), 60000);
+    return () => clearInterval(t);
+  }, [status?.cooldownActive]);
+
   async function handleRate(productId, stars) {
     setBusy(true);
+    setErr("");
     try {
       const wasAlreadyComplete = status.completedDays.includes(status.today);
       const result = await rateProduct(userId, productId, stars);
@@ -68,6 +102,7 @@ export default function DailyReviewsWidget({ userId, isVipMember, onEarningsUnlo
       }
     } catch (e) {
       console.error("Failed to submit rating:", e);
+      setErr(e.message || "Could not submit rating. Please try again.");
     }
     setBusy(false);
   }
@@ -77,6 +112,13 @@ export default function DailyReviewsWidget({ userId, isVipMember, onEarningsUnlo
   const ratedCount = Object.keys(status.todaysRatings).length;
   const totalCount = status.todaysProducts.length;
   const allRatedToday = ratedCount === totalCount;
+  // Re-derive live rather than trusting a possibly-stale cooldownActive
+  // flag from the last fetch — cooldownEndsAt is a fixed timestamp, so
+  // comparing it against Date.now() on every render (including the
+  // once-a-minute forced re-renders above) keeps this accurate without
+  // needing a fresh Firestore read just to notice the cooldown expired.
+  const cooldownActive = status.cooldownEndsAt != null && Date.now() < status.cooldownEndsAt;
+  const cooldownRemaining = cooldownActive ? formatCooldownRemaining(status.cooldownEndsAt) : null;
 
   return (
     <div
@@ -93,10 +135,13 @@ export default function DailyReviewsWidget({ userId, isVipMember, onEarningsUnlo
         <span style={{ fontSize: 15, fontWeight: 800, color: "#F9F1E7" }}>Daily Reviews</span>
       </div>
       <div style={{ fontSize: 12, color: C.muted, fontWeight: 600, marginBottom: 14 }}>
-        {allRatedToday
+        {cooldownActive
+          ? `You can rate again in ${cooldownRemaining}`
+          : allRatedToday
           ? "All rated — today's earnings are unlocked ✓"
           : `Rate all ${totalCount} products today to unlock today's VIP earnings (${ratedCount}/${totalCount} done)`}
       </div>
+      {err && <p style={{ fontSize: 11, color: C.red, marginBottom: 12, fontWeight: 600 }}>{err}</p>}
 
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
         {status.todaysProducts.map((p) => (
@@ -109,6 +154,7 @@ export default function DailyReviewsWidget({ userId, isVipMember, onEarningsUnlo
               padding: 12,
               background: "rgba(255,255,255,0.03)",
               borderRadius: 12,
+              opacity: cooldownActive ? 0.6 : 1,
             }}
           >
             <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
@@ -161,15 +207,15 @@ export default function DailyReviewsWidget({ userId, isVipMember, onEarningsUnlo
               productId={p.id}
               currentRating={status.todaysRatings[p.id]}
               onRate={handleRate}
-              disabled={busy || status.todaysRatings[p.id] != null}
+              disabled={busy || cooldownActive || status.todaysRatings[p.id] != null}
             />
           </div>
         ))}
       </div>
 
-      {!allRatedToday && (
+      {!allRatedToday && !cooldownActive && (
         <p style={{ fontSize: 11, color: C.dim, marginTop: 12, fontWeight: 600 }}>
-          Unrated days earn ₦0 for that day — this can't be made up later.
+          Rate today's products to unlock today's earning plus any pending days since your last review.
         </p>
       )}
     </div>

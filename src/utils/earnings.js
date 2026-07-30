@@ -15,12 +15,15 @@
 //    lifetime withdrawn.
 // 4. Minimum withdrawal is ₦1,200, checked against the withdrawable
 //    profit balance (not the locked capital).
-// 5. DAILY REVIEWS GATE: a day's earning is fully conditional on the user
-//    having rated ALL of that day's featured products (see
-//    services/reviews.js). No rating that day = ₦0 earned for that day —
-//    this is an intentional, confirmed design choice (not a bonus-on-top
-//    model). Missed days are gone permanently; there is no catch-up
-//    mechanism, unlike the earlier Read to Earn design this replaced.
+// 5. DAILY REVIEWS GATE: a day's earning is conditional on the user having
+//    rated ALL of that day's featured products (see services/reviews.js).
+//    CATCH-UP RULE (confirmed with the project owner): a missed day is not
+//    lost — it's deferred. The next time the user completes a full day's
+//    review, that single action pays out every unpaid day back through
+//    their last completed review, all at once, with no cap on how many
+//    days can be backfilled. The user still has to keep reviewing to keep
+//    earning going forward — this only removes the "gone forever" part of
+//    missing a day, it is not a one-time unlock.
 
 export const EARNINGS_START_DELAY_MS = 24 * 60 * 60 * 1000; // 24 hours
 export const MIN_WITHDRAWAL = 1200;
@@ -67,13 +70,11 @@ export function getDaysEarning(approvedAt, now = Date.now()) {
  * @param {number} approvedAt - timestamp the deposit was approved
  * @param {number} lifetimeWithdrawn - total profit already withdrawn from
  *   this specific investment
- * @param {number} reviewedDayCount - count of distinct earning-days for
- *   which the user completed that day's full product review set. Callers
- *   get this from services/reviews.js by comparing the investment's
- *   earning-day range against the user's completed-review-day records.
- *   Capped by the caller at daysEarning (can't exceed total days elapsed).
- *   Unreviewed days earn nothing — there is no partial credit and no
- *   catch-up, unlike the guaranteed/pending split this replaced.
+ * @param {number} reviewedDayCount - count of earning-days currently PAID
+ *   under the catch-up rule (paid-through-day boundary, not a literal
+ *   per-day tally) — see countReviewedEarningDays() in services/reviews.js
+ *   for how this is derived. Capped by the caller at daysEarning (can't
+ *   exceed total days elapsed).
  * @param {number} now - defaults to current time; parameterized for testing
  */
 export function calculateInvestmentEarnings(dailyRate, approvedAt, lifetimeWithdrawn = 0, reviewedDayCount = 0, now = Date.now()) {
@@ -82,7 +83,12 @@ export function calculateInvestmentEarnings(dailyRate, approvedAt, lifetimeWithd
 
   const cappedReviewedDays = Math.min(reviewedDayCount, daysEarning);
   const availableEarnings = dailyRate * cappedReviewedDays;
-  const missedEarnings = dailyRate * (daysEarning - cappedReviewedDays); // forfeited permanently, shown for transparency only
+  // PENDING (not forfeited) — under the catch-up rule, this is the
+  // backlog of days not yet paid because the user hasn't reviewed since
+  // then. It clears out to ₦0 the moment they next complete a full day's
+  // review (see countReviewedEarningDays in services/reviews.js), so this
+  // figure is a "not yet unlocked" balance, not money that's gone.
+  const missedEarnings = dailyRate * (daysEarning - cappedReviewedDays);
 
   const withdrawableBalance = Math.max(0, availableEarnings - lifetimeWithdrawn);
   const earningsStartTime = getEarningsStartTime(approvedAt);

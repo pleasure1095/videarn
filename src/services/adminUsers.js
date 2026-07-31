@@ -39,14 +39,24 @@ function findUserByReferralCode(users, code) {
   return users.find((u) => u.referralCode === code) || null;
 }
 
+const LEVEL_1_REFERRAL_PERCENT = 0.09; // direct referrer
+const LEVEL_2_REFERRAL_PERCENT = 0.02; // referrer's own referrer ("referral of the referred")
+
 /**
- * Credits a ONE-TIME referral bonus when a referred user's FIRST VIP
- * deposit is approved. Uses a Firestore transaction to atomically check
- * and set the referred user's firstVipRewarded flag — this closes a race
- * condition where two near-simultaneous approve actions (e.g. an admin
- * double-tapping Approve, or two admin sessions approving the same
- * deposit) could both read firstVipRewarded as false before either write
- * completes, resulting in the referrer being paid twice.
+ * Credits a ONE-TIME two-level referral bonus when a referred user's
+ * FIRST VIP deposit is approved:
+ *   - Level 1 (the direct referrer): 9% of the referred user's planDaily
+ *   - Level 2 (that referrer's own referrer, if any): 2% of planDaily
+ * CHANGED (per site owner request): previously a flat bonus equal to
+ * 100% of planDaily, paid to the direct referrer only. Replaced entirely
+ * — there is no flat-bonus fallback.
+ *
+ * Uses a Firestore transaction to atomically check and set the referred
+ * user's firstVipRewarded flag — this closes a race condition where two
+ * near-simultaneous approve actions (e.g. an admin double-tapping
+ * Approve, or two admin sessions approving the same deposit) could both
+ * read firstVipRewarded as false before either write completes, resulting
+ * in referrers being paid twice.
  *
  * Called from the deposit approval flow, after a deposit's status is set
  * to "approved" — not before, so we never credit a bonus for a deposit
@@ -76,22 +86,48 @@ export async function creditReferralBonusIfEligible(depositUserId, planDaily) {
   if (!referrerCode) return { credited: false, reason: "No referrer." };
 
   const allUsers = await listAllUsers();
-  const referrer = findUserByReferralCode(allUsers, referrerCode);
-  if (!referrer) return { credited: false, reason: "Referrer not found." };
+  const level1Referrer = findUserByReferralCode(allUsers, referrerCode);
+  if (!level1Referrer) return { credited: false, reason: "Referrer not found." };
 
-  // Step 2: credit the referrer's bonus. This second write is not part of
-  // the same transaction as step 1 (Firestore transactions work best when
+  // Level 2: the direct referrer's OWN referrer, one hop further up the
+  // same referrerCode chain. May not exist (level1Referrer might have
+  // joined with no referrer of their own) — that's fine, level 2 simply
+  // doesn't get paid in that case.
+  const level2Referrer = level1Referrer.referrerCode
+    ? findUserByReferralCode(allUsers, level1Referrer.referrerCode)
+    : null;
+
+  const level1Bonus = Math.round(planDaily * LEVEL_1_REFERRAL_PERCENT);
+  const level2Bonus = Math.round(planDaily * LEVEL_2_REFERRAL_PERCENT);
+
+  // Step 2: credit each referrer's bonus. These writes aren't part of the
+  // same transaction as step 1 (Firestore transactions work best when
   // reads/writes are on documents known up front), but the critical
   // double-payment guard is the atomic claim above — by the time we reach
   // here, only one caller can ever have referrerCode in hand for this user.
-  const referrerRef = doc(db, USERS_COLLECTION, referrer.uid);
+  const level1Ref = doc(db, USERS_COLLECTION, level1Referrer.uid);
   await runTransaction(db, async (transaction) => {
-    const referrerSnap = await transaction.get(referrerRef);
-    const currentBonus = referrerSnap.exists() ? referrerSnap.data().referralBonusTotal || 0 : 0;
-    transaction.update(referrerRef, { referralBonusTotal: currentBonus + planDaily });
+    const snap = await transaction.get(level1Ref);
+    const currentBonus = snap.exists() ? snap.data().referralBonusTotal || 0 : 0;
+    transaction.update(level1Ref, { referralBonusTotal: currentBonus + level1Bonus });
   });
 
-  return { credited: true, referrer, bonus: planDaily };
+  if (level2Referrer) {
+    const level2Ref = doc(db, USERS_COLLECTION, level2Referrer.uid);
+    await runTransaction(db, async (transaction) => {
+      const snap = await transaction.get(level2Ref);
+      const currentBonus = snap.exists() ? snap.data().referralBonusTotal || 0 : 0;
+      transaction.update(level2Ref, { referralBonusTotal: currentBonus + level2Bonus });
+    });
+  }
+
+  return {
+    credited: true,
+    referrer: level1Referrer,
+    bonus: level1Bonus,
+    level2Referrer: level2Referrer || null,
+    level2Bonus: level2Referrer ? level2Bonus : 0,
+  };
 }
 
 /**

@@ -157,6 +157,13 @@ export async function approveDeposit(deposit, adminNote = "") {
       "referral",
       `You earned a ₦${referralResult.bonus.toLocaleString()} referral bonus from ${deposit.userName}'s first VIP investment!`
     );
+    if (referralResult.level2Referrer) {
+      await createNotification(
+        referralResult.level2Referrer.uid,
+        "referral",
+        `You earned a ₦${referralResult.level2Bonus.toLocaleString()} referral bonus from ${deposit.userName}'s first VIP investment (2nd-level referral)!`
+      );
+    }
   }
 
   return referralResult;

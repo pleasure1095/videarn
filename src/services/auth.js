@@ -62,18 +62,27 @@ export async function findUserByReferralCode(code) {
 export async function registerUser({ name, email, password, phone, refCode }) {
   const normalizedEmail = email.trim().toLowerCase();
 
-  let referrerCode = "";
-  if (refCode && refCode.trim()) {
-    const referrer = await findUserByReferralCode(refCode);
-    if (referrer) referrerCode = referrer.referralCode;
-  }
-
   const credential = await createUserWithEmailAndPassword(
     auth,
     normalizedEmail,
     password
   );
   const uid = credential.user.uid;
+
+  // Referral lookup MUST happen after auth account creation, not before —
+  // Firestore rules require the caller to be signed in to read the users
+  // collection (see firebase/firestore.rules), and createUserWithEmailAndPassword
+  // is what actually signs the user in. Looking this up beforehand throws
+  // a permission-denied error with no Firebase Auth error code, which
+  // AuthPage.jsx's friendlyError() can't map to anything specific and
+  // shows as a generic "Something went wrong" — this was a real bug,
+  // not a network hiccup, and it only affected signups that entered a
+  // referral code (which is why plain signups worked fine).
+  let referrerCode = "";
+  if (refCode && refCode.trim()) {
+    const referrer = await findUserByReferralCode(refCode);
+    if (referrer) referrerCode = referrer.referralCode;
+  }
 
   const referralCode = await genReferralCode(name, db);
 

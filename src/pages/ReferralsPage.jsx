@@ -101,8 +101,10 @@ export default function ReferralsPage() {
 
       <div style={{ ...cardStyle, fontSize: 12, color: C.muted, lineHeight: 1.7 }}>
         Share your link or code with friends. When someone you referred makes their first VIP
-        deposit and it's approved by an admin, you receive a one-time bonus equal to that plan's
-        daily earnings — for example, a VIP 3 referral earns you ₦2,000.
+        deposit and it's approved by an admin, you receive a one-time bonus equal to 9% of that
+        plan's daily earnings — for example, a VIP Growth referral earns you ₦144. If they were
+        referred using your friend's own link (i.e. you referred your friend, and they referred
+        someone else), you also earn a 2nd-level bonus of 2% on that person's first deposit.
       </div>
     </div>
   );

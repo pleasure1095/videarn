@@ -57,7 +57,8 @@ export default function AdminDepositsPage() {
       const result = await approveDeposit(dep, notes[dep.id] || "");
       setOk(
         result.credited
-          ? `Approved. Referral bonus of ₦${result.bonus.toLocaleString()} credited to ${result.referrer.name}.`
+          ? `Approved. Referral bonus of ₦${result.bonus.toLocaleString()} credited to ${result.referrer.name}.` +
+            (result.level2Referrer ? ` Level-2 bonus of ₦${result.level2Bonus.toLocaleString()} credited to ${result.level2Referrer.name}.` : "")
           : "Deposit approved."
       );
       await load();
